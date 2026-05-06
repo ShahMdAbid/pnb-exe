@@ -22,6 +22,13 @@ import {
 import 'katex/dist/katex.min.css';
 import './App.css';
 import guideContent from './guide.md?raw';
+import { 
+    processAiRequest, 
+    MAGIC_REFINE_PROMPT, 
+    CUSTOM_REFINE_SYSTEM_PROMPT, 
+    BREAK_MATH_PROMPT,
+    CLIPBOARD_FIXER_PROMPT 
+} from './utils/aiService';
 
 // --- HELPER: Database Persistence ---
 const saveImageToDB = async (blob) => {
@@ -333,6 +340,14 @@ const ABOUT_NOTE = {
     content: guideContent
 };
 
+const GEMINI_MODELS = [
+    { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite (Fast & Free)' },
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+    { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
+    { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' }
+];
+
 function App() {
     // Add a booting state
     const [isBooting, setIsBooting] = useState(true);
@@ -368,8 +383,8 @@ function App() {
         e.preventDefault();
         const noteId = e.dataTransfer.getData('noteId');
         if (!noteId) return;
-        
-        setNotes(prevNotes => prevNotes.map(n => 
+
+        setNotes(prevNotes => prevNotes.map(n =>
             n.id === noteId ? { ...n, folderId: targetFolderId } : n
         ));
     };
@@ -385,7 +400,7 @@ function App() {
                     !n.id.startsWith('about-poring-notebook') &&
                     n.id !== 'welcome-note-default'
                 );
-                
+
                 setNotes([ABOUT_NOTE, ...filtered]);
                 setFolders(savedFolders);
                 setActiveNoteId(savedActiveId);
@@ -397,13 +412,13 @@ function App() {
         };
         loadAppData();
     }, []);
-    
+
     // We need a ref to access the activeNoteId inside our clipboard listener without re-rendering
     const activeNoteIdRef = useRef(activeNoteId);
     useEffect(() => {
         activeNoteIdRef.current = activeNoteId;
     }, [activeNoteId]);
-    
+
     const [lastRefinedContent, setLastRefinedContent] = useState(null);
     const [lastRefinedNoteId, setLastRefinedNoteId] = useState(null);
     const [canUndoRefine, setCanUndoRefine] = useState(false);
@@ -452,10 +467,26 @@ function App() {
         const saved = localStorage.getItem('poring_active_api_key_index');
         return saved ? parseInt(saved, 10) : 0;
     });
+
+    const [aiProvider, setAiProvider] = useState(() => localStorage.getItem('poring_ai_provider') || 'gemini');
+    const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem('poring_gemini_key') || '');
+    const [geminiModel, setGeminiModel] = useState(() => localStorage.getItem('poring_gemini_model') || 'gemini-2.5-flash-lite');
+    
+    // AI Clipboard Filter State
+    const [isAiClipboardEnabled, setIsAiClipboardEnabled] = useState(false);
+    const isAiClipboardEnabledRef = useRef(false);
+    
+    const toggleAiClipboard = () => {
+        const newState = !isAiClipboardEnabled;
+        setIsAiClipboardEnabled(newState);
+        isAiClipboardEnabledRef.current = newState;
+        showToast(newState ? "AI Clipboard Fixer: ON" : "AI Clipboard Fixer: OFF");
+    };
+
     const [isCustomRefineOpen, setIsCustomRefineOpen] = useState(false);
     const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
     const [isColorMenuOpen, setIsColorMenuOpen] = useState(false);
-    
+
     // --- AUTO NOTE STATE ---
     const [isAutoNoteEnabled, setIsAutoNoteEnabled] = useState(false);
     const isAutoNoteEnabledRef = useRef(false);
@@ -464,7 +495,7 @@ function App() {
         const newState = !isAutoNoteEnabled;
         setIsAutoNoteEnabled(newState);
         isAutoNoteEnabledRef.current = newState;
-        
+
         if (typeof window !== 'undefined' && window.electronAPI) {
             if (newState) {
                 window.electronAPI.startClipboardListener();
@@ -475,7 +506,7 @@ function App() {
             }
         }
     };
-    
+
     const [customRefineText, setCustomRefineText] = useState('');
     const [savedCustomInstructions, setSavedCustomInstructions] = useState(() => {
         const saved = localStorage.getItem('poring_saved_custom_instructions');
@@ -509,6 +540,13 @@ function App() {
     const editorRef = useRef(null);
     const previewRef = useRef(null);
 
+    const aiConfigRef = useRef({ aiProvider, geminiApiKey, geminiModel, apiKeys, activeApiKeyIndex });
+    
+    // Keep the ref updated whenever settings change
+    useEffect(() => {
+        aiConfigRef.current = { aiProvider, geminiApiKey, geminiModel, apiKeys, activeApiKeyIndex };
+    }, [aiProvider, geminiApiKey, geminiModel, apiKeys, activeApiKeyIndex]);
+
     // Persistence
     useEffect(() => {
         // DO NOT save if the app is still booting, or you will overwrite data with empty arrays!
@@ -516,7 +554,7 @@ function App() {
             localforage.setItem('poring_notes', notes);
             localforage.setItem('poring_folders', folders);
             localforage.setItem('poring_active_note', activeNoteId || '');
-            
+
             // Settings are fine to stay in localStorage as they are very small
             localStorage.setItem('poring_typography', JSON.stringify(typography));
             localStorage.setItem('poring_spacing', spacing);
@@ -526,37 +564,72 @@ function App() {
             localStorage.setItem('poring_custom_templates', JSON.stringify(customTemplates));
             localStorage.setItem('poring_saved_custom_instructions', JSON.stringify(savedCustomInstructions));
             localStorage.setItem('poring_image_widths', JSON.stringify(imageWidths));
+            
+            // NEW SAVES:
+            localStorage.setItem('poring_ai_provider', aiProvider);
+            localStorage.setItem('poring_gemini_key', geminiApiKey);
+            localStorage.setItem('poring_gemini_model', geminiModel);
         }
-    }, [notes, folders, activeNoteId, typography, spacing, theme, apiKeys, activeApiKeyIndex, customTemplates, savedCustomInstructions, imageWidths, isBooting]);
+    }, [notes, folders, activeNoteId, typography, spacing, theme, apiKeys, activeApiKeyIndex, customTemplates, savedCustomInstructions, imageWidths, aiProvider, geminiApiKey, geminiModel, isBooting]);
 
     // Clipboard Listener Receiver
     useEffect(() => {
         if (typeof window !== 'undefined' && window.electronAPI) {
-             window.electronAPI.onClipboardUpdate(async (payload) => {
-                 if (!isAutoNoteEnabledRef.current) return;
-                 
-                 let appendText = '';
-                 
-                 if (payload.type === 'text') {
-                     appendText = `\n\n${payload.text}\n\n`;
-                 } else if (payload.type === 'image') {
-                     try {
-                         const response = await fetch(payload.dataURL);
-                         const blob = await response.blob();
-                         const key = await saveImageToDB(blob);
-                         appendText = `\n\n![Image | ${imageWidths.autoNote}](${key})\n\n`;
-                     } catch (e) {
-                         console.error('Clipboard image error', e);
-                         return; // Stop if failed
-                     }
-                 }
+            window.electronAPI.onClipboardUpdate(async (payload) => {
+                if (!isAutoNoteEnabledRef.current) return;
 
-                 if (appendText) {
-                     setLocalContent(prev => prev + appendText);
-                 }
-             });
+                let appendText = '';
+
+                if (payload.type === 'text') {
+                    const rawText = payload.text;
+
+                    // FLOW: Copied Text -> AI -> Editor
+                    if (isAiClipboardEnabledRef.current) {
+                        showToast("AI is cleaning clipboard text...");
+                        
+                        // Access current settings from Ref
+                        const { aiProvider: provider, geminiApiKey: gKey, geminiModel: gModel, apiKeys: groqKeys, activeApiKeyIndex: groqIdx } = aiConfigRef.current;
+
+                        const config = {
+                            provider: provider,
+                            apiKey: provider === 'gemini' ? gKey : groqKeys[groqIdx],
+                            model: provider === 'gemini' ? gModel : 'llama-3.3-70b-versatile',
+                            systemInstruction: CLIPBOARD_FIXER_PROMPT,
+                            prompt: rawText,
+                            temperature: 0.1
+                        };
+
+                        try {
+                            const cleanedText = await processAiRequest(config);
+                            appendText = `\n\n${cleanedText}\n\n`;
+                            showToast("Clipboard fixed and added!");
+                        } catch (err) {
+                            console.error("AI Clipboard Fix failed:", err);
+                            showToast("AI Fix failed. Adding raw text.");
+                            appendText = `\n\n${rawText}\n\n`; // Fallback to original text
+                        }
+                    } else {
+                        // FLOW: Copied Text -> Editor (Direct)
+                        appendText = `\n\n${rawText}\n\n`;
+                    }
+                } else if (payload.type === 'image') {
+                    try {
+                        const response = await fetch(payload.dataURL);
+                        const blob = await response.blob();
+                        const key = await saveImageToDB(blob);
+                        appendText = `\n\n![Image | ${imageWidths.autoNote}](${key})\n\n`;
+                    } catch (e) {
+                        console.error('Clipboard image error', e);
+                        return;
+                    }
+                }
+
+                if (appendText) {
+                    setLocalContent(prev => prev + appendText);
+                }
+            });
         }
-    }, []);
+    }, []); // Listener attached once on mount
 
     const activeNote = notes.find(n => n.id === activeNoteId) || notes[0];
 
@@ -781,7 +854,7 @@ function App() {
         if (!file) return;
 
         const importedData = await importPoringFile(file);
-        
+
         if (importedData) {
             const newNote = {
                 id: `imported_${Date.now()}`,
@@ -793,20 +866,11 @@ function App() {
             setActiveNoteId(newNote.id);
             showToast("Note imported successfully!");
         }
-        
+
         e.target.value = ''; // Reset file input
     };
 
     const handleMagicRefine = async () => {
-        // Use the selected API key
-        const apiKey = apiKeys[activeApiKeyIndex];
-
-        if (!apiKey || apiKey.trim() === '') {
-            alert(`API Key ${activeApiKeyIndex + 1} is empty.Please select a valid key in Settings.`);
-            setIsSettingsOpen(true);
-            return;
-        }
-
         const textarea = editorRef.current;
         const start = textarea.selectionStart;
         const end = textarea.selectionEnd;
@@ -814,269 +878,25 @@ function App() {
         const selectedText = fullText.substring(start, end);
         const textToRefine = selectedText || fullText;
 
-        // Save for Undo
+        // Configuration based on active provider
+        const config = {
+            provider: aiProvider,
+            apiKey: aiProvider === 'gemini' ? geminiApiKey : apiKeys[activeApiKeyIndex],
+            model: aiProvider === 'gemini' ? geminiModel : 'llama-3.3-70b-versatile',
+            systemInstruction: MAGIC_REFINE_PROMPT,
+            prompt: `Refine this note. Return only markdown: \n\n${textToRefine}`,
+            temperature: 0
+        };
+
         setLastRefinedContent(fullText);
         setLastRefinedNoteId(activeNoteId);
         setCanUndoRefine(true);
-
         setIsRefining(true);
+
         try {
-            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${apiKey} `,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    model: 'llama-3.3-70b-versatile',
-                    messages: [
-                        {
-                            role: 'system',
-                            content: `You are an Elite Academic Typesetter and LaTeX Specialist.
-
-Your function is STRICTLY LIMITED to structural formatting and mathematical typesetting.
-
-You are NOT allowed to rewrite, interpret, infer, complete, fix, or improve the content in any way.
-
-
-### CRITICAL CORE DIRECTIVE(ABSOLUTE PRIORITY)
-
-Preserve ALL original content EXACTLY, including:
-
-- words
-    - numbers
-    - symbols
-    - spacing
-    - line breaks
-        - wrappers
-        - custom syntax
-            - malformed expressions
-
-DO NOT add, remove, reorder, or rewrite ANY content.
-
-DO NOT infer missing symbols.
-
-DO NOT correct mathematical logic.
-
-DO NOT complete incomplete expressions.
-
-If content is malformed or ambiguous, preserve it EXACTLY.
-
-Your ONLY job is to apply proper LaTeX math delimiters and alignment formatting.
-
----
-
-### TRANSFORMATION SCOPE(ONLY THESE ARE ALLOWED)
-
-You MAY ONLY:
-
-• Add inline math delimiters: $ ...$
-
-• Add display math delimiters: $$ ...$$
-
-
-• Insert alignment markers &
-
-• Insert line breaks \\ inside aligned blocks
-
-• Convert plain - text math into valid LaTeX math syntax
-
-
-$$
-\begin{ aligned }
-...
-...
-\end{ aligned }
-$$
-
-
-
----
-
-### INLINE vs DISPLAY RULE
-
-Use INLINE math($ ...$) when:
-
-• expression is short
-• expression is inside text
-• single - line math
-
-Use DISPLAY math($$ ...$$) when:
-
-• expression is standalone
-• multi - line derivation
-• contains alignment steps
-
-Display math MUST:
-• every line MUST use & before =
-• every line except last MUST end with \\
-• vertical alignment MUST be preserved
-
-Example:
-
-Input:
-x = y + z
-= 10 + 5
-= 15
-
-Output:
-$$
-\begin{ aligned }
-x &= y + z \\
-&= 10 + 5 \\
-&= 15
-\end{ aligned }
-$$
-
-
-
----
-
-### WRAPPER INTEGRITY RULE(HIGHEST STRUCTURAL PRIORITY)
-
-The following constructs are STRUCTURAL WRAPPERS used by the editor:
-
-center[...]
-right[...]
-red[...]
-blue[...]
-green[...]
-orange[...]
-purple[...]
-gray[...]
-left[...]
-
-++underline++
-
-== highlight ==
-
-    red == highlight ==
-
-    //1
-    //2
-    //3
-    etc.
-
-These wrappers are NOT LaTeX.
-
-They are NOT Markdown.
-
-They are EDITOR STRUCTURE and MUST be preserved EXACTLY.
-
----
-
-### STRICT WRAPPER PRESERVATION REQUIREMENTS
-
-NEVER:
-
-• remove wrappers
-• rename wrappers
-• relocate wrappers
-• split wrappers
-• wrap wrappers with $ or $$
-• convert wrappers into LaTeX
-
-WRAPPERS MUST REMAIN CHARACTER - FOR - CHARACTER IDENTICAL.
-
----
-
-### MATH INSIDE WRAPPERS RULE
-
-If math exists INSIDE a wrapper, convert ONLY the math, NOT the wrapper.
-
-Correct example:
-
-Input:
-center[x = y + z]
-
-Output:
-center[$x = y + z$]
-
-Correct example:
-
-Input:
-red[
-    x = y + z
-= 10
-]
-
-Output:
-red[
-    $$
-\begin{ aligned }
-x &= y + z \\
-&= 10
-\end{ aligned }
-$$
-]
-
-WRAPPER stays untouched.ONLY internal math is converted.
-
-
-### NEVER MOVE MATH OUTSIDE WRAPPERS
-
-INVALID:
-$$ center[x = y] $$
-
-VALID:
-center[$x = y$]
-
----
-
-
-### CODE BLOCK PROTECTION RULE
-
-If content appears inside, DO NOT modify ANYTHING inside.
-
-### OUTPUT RULES(STRICT)
-
-Return ONLY the refined Markdown.
-
-DO NOT include explanations.
-
-DO NOT include comments.
-
-DO NOT include preamble or postscript.
-
-DO NOT include conversational text.
-
-OUTPUT ONLY the transformed content.
-
----
-
-### HEADER SYNTAX RULE(SCALABLE LAYOUT)
-
-NEVER use standard Markdown headers(#, ##, ###) for section titles by your own unless user uses #,##,### by himself, dont re invent, if exist let it stay.
-
-    Use bold text (** Text **) for section titles otherwise.
-
-This ensures font sizes scale correctly with user settings.
-
----
-
-### FINAL EXECUTION PRIORITY ORDER
-
-Priority 1 → Preserve wrappers EXACTLY
-Priority 2 → Preserve ALL original content EXACTLY
-Priority 3 → Apply math delimiters
-Priority 4 → Apply alignment formatting
-
-Wrappers ALWAYS override math formatting if conflict occurs.
-
-NEVER violate wrapper integrity.`
-                        },
-                        { role: 'user', content: `Refine this note.Return only markdown: \n\n${textToRefine} ` }
-                    ],
-                    temperature: 0
-                })
-            });
-
-            const data = await response.json();
-            if (data.error) throw new Error(data.error.message);
-
-            let refinedText = data.choices[0].message.content.trim();
-
-            // SANITIZER: Remove markdown code fences if AI added them
+            let refinedText = await processAiRequest(config);
+            
+            // Sanitizer: Remove markdown code fences if AI added them
             if (refinedText.startsWith('```')) {
                 refinedText = refinedText.replace(/^```[a-zA-Z]*\n/, '').replace(/\n```$/, '');
             }
@@ -1084,7 +904,6 @@ NEVER violate wrapper integrity.`
             const newContent = selectedText
                 ? fullText.substring(0, start) + refinedText + fullText.substring(end)
                 : refinedText;
-
             setLocalContent(newContent);
         } catch (error) {
             alert('AI Refine failed: ' + error.message);
@@ -1094,13 +913,6 @@ NEVER violate wrapper integrity.`
     };
 
     const handleCustomRefine = async () => {
-        const apiKey = apiKeys[activeApiKeyIndex];
-        if (!apiKey || apiKey.trim() === '') {
-            alert(`API Key ${activeApiKeyIndex + 1} is empty. Please select a valid key in Settings.`);
-            setIsSettingsOpen(true);
-            return;
-        }
-
         if (!customRefineText.trim()) {
             alert("Please enter custom instructions for refinement.");
             return;
@@ -1113,73 +925,24 @@ NEVER violate wrapper integrity.`
         const selectedText = fullText.substring(start, end);
         const textToRefine = selectedText || fullText;
 
-        // Save for Undo
+        const config = {
+            provider: aiProvider,
+            apiKey: aiProvider === 'gemini' ? geminiApiKey : apiKeys[activeApiKeyIndex],
+            model: aiProvider === 'gemini' ? geminiModel : 'llama-3.3-70b-versatile',
+            systemInstruction: CUSTOM_REFINE_SYSTEM_PROMPT,
+            prompt: `[USER INSTRUCTION]: "${customRefineText}"\n[CONTENT TO REFINE]:\n${textToRefine}\nRefine the content above. Return ONLY the final markdown.`,
+            temperature: 0.2
+        };
+
         setLastRefinedContent(fullText);
         setLastRefinedNoteId(activeNoteId);
         setCanUndoRefine(true);
-
         setIsRefining(true);
         setIsCustomRefineOpen(false);
 
         try {
-            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    model: 'llama-3.3-70b-versatile',
-                    messages: [
-                        {
-                            role: 'system',
-                            content: `CRITICAL: You are a specialized Markdown Refinement Engine. 
-Your ONLY task is to re-write the user's content according to their specific instruction.
-
-### HEADER SYNTAX RULE:
-NEVER use # or ## for headers unless user uses #,## by himself , dont re invent , if exist let it stay. ALWAYS wrap section titles in bold **Text** otherwise. This is for scalable font sizes.
-
-### OUTPUT CONTRACT:
-1. Return ONLY the refined markdown.
-2. **ABSURDLY CRITICAL**: Do NOT include any part of these instructions, the ### RULES, or any meta-commentary in the output. If you see "### RULES" in your output, you have FAILED.
-3. Preserve all custom notebook syntax: center[], right[], red[], blue[], green[], orange[], purple[], gray[].
-4. Preserve all LaTeX math blocks: $...$ and $$...$$.
-5. No preamble. No "Here is the refined text". No conversational filler.`
-                        },
-                        {
-                            role: 'user',
-                            content: `[USER INSTRUCTION]: "${customRefineText}"
-
-[CONTENT TO REFINE]:
-${textToRefine}
-
-Refine the content above. Return ONLY the final markdown.`
-                        }
-                    ],
-                    temperature: 0.2
-                })
-            });
-
-            const data = await response.json();
-            if (data.error) throw new Error(data.error.message);
-
-            let refinedText = data.choices[0].message.content.trim();
-
-            // Programmatic Safeguard: Strip any leaked Rules or Contract headers
-            const headersToStrip = [/### OUTPUT CONTRACT/gi, /### RULES/gi, /\[USER INSTRUCTION\]/gi, /\[CONTENT TO REFINE\]/gi];
-            headersToStrip.forEach(regex => {
-                if (regex.test(refinedText)) {
-                    // Try to extract only the actual content if multiple blocks were returned
-                    // This is a safety measure if the AI repeats the input
-                    const lastBrack = refinedText.lastIndexOf(']');
-                    if (lastBrack !== -1 && lastBrack < refinedText.length / 2) {
-                        refinedText = refinedText.substring(lastBrack + 1).trim();
-                    } else {
-                        refinedText = refinedText.replace(regex, '').trim();
-                    }
-                }
-            });
-
+            let refinedText = await processAiRequest(config);
+            
             if (refinedText.startsWith('```')) {
                 refinedText = refinedText.replace(/^```[a-zA-Z]*\n/, '').replace(/\n```$/, '');
             }
@@ -1187,7 +950,6 @@ Refine the content above. Return ONLY the final markdown.`
             const newContent = selectedText
                 ? fullText.substring(0, start) + refinedText + fullText.substring(end)
                 : refinedText;
-
             setLocalContent(newContent);
         } catch (error) {
             alert('Custom Refine failed: ' + error.message);
@@ -1262,91 +1024,31 @@ Refine the content above. Return ONLY the final markdown.`
         const fullText = localContent;
         const selectedText = fullText.substring(start, end);
 
-        // Check if selected text is a math block ($$ ... $$)
         if (!selectedText.trim().startsWith('$$') || !selectedText.trim().endsWith('$$')) {
             alert("Please select an entire math block (including $$ delimiters).");
-            return;
-        }
-
-        const apiKey = apiKeys[activeApiKeyIndex];
-        if (!apiKey) {
-            alert('Please add a Groq API Key in Settings first.');
-            setIsSettingsOpen(true);
             return;
         }
 
         const segmentsPrompt = await requestPrompt("Target number of segments to split this block into?", "2");
         if (segmentsPrompt === null) return;
         const segmentsNum = parseInt(segmentsPrompt, 10);
-        if (isNaN(segmentsNum) || segmentsNum < 2) {
-            alert("Please enter a number >= 2.");
-            return;
-        }
+
+        const config = {
+            provider: aiProvider,
+            apiKey: aiProvider === 'gemini' ? geminiApiKey : apiKeys[activeApiKeyIndex],
+            model: aiProvider === 'gemini' ? geminiModel : 'llama-3.3-70b-versatile',
+            systemInstruction: BREAK_MATH_PROMPT,
+            prompt: `Split this math block into exactly ${segmentsNum} logical separate blocks:\n\n${selectedText}`,
+            temperature: 0
+        };
 
         setIsBreakingMath(true);
         setIsToolsMenuOpen(false);
-
         try {
-            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    model: 'llama-3.3-70b-versatile',
-                    messages: [
-                        {
-                            role: 'system',
-                            content: `You are a Mathematics Typesetting Specialist.
-
-Your task is to take a single large LaTeX math block ($$ ... $$) and split it into multiple smaller, separate math blocks ($$ ... $$).
-
-### CRITICAL RULES:
-1. Preserve ALL mathematical logic and symbols exactly.
-2. The user will specify a TARGET number of blocks. Aim to split the content into approximately that many blocks based on logical derivation steps.
-3. If the content is an "aligned" environment (\\begin{aligned} ... \\end{aligned}), split it at the line breaks (\\\\) while keeping the alignment logic valid for each resulting block.
-4. If a split result contains multiple lines of math, wrap them in a new \\begin{aligned} ... \\end{aligned} block inside the $$ tags if needed for alignment.
-5. Every output block must be wrapped in $$ ... $$.
-6. Add a single newline between the resulting blocks.
-7. **OUTPUT ONLY THE MARKDOWN MODIFICATION**. Do not include explanations, preambles, or conversational text.
-
-Example Input (Target: 3):
-$$
-\\begin{aligned}
-x &= y + z \\\\
-&= 10 + 5 \\\\
-&= 15
-\\end{aligned}
-$$
-
-Example Output:
-$$
-x = y + z
-$$
-
-$$
-= 10 + 5
-$$
-
-$$
-= 15
-$$`
-                        },
-                        { role: 'user', content: `Split this math block into exactly ${segmentsNum} logical separate blocks:\n\n${selectedText}` }
-                    ],
-                    temperature: 0
-                })
-            });
-
-            const data = await response.json();
-            if (data.error) throw new Error(data.error.message);
-
-            const result = data.choices[0].message.content.trim();
+            const result = await processAiRequest(config);
             const updatedContent = fullText.substring(0, start) + result + fullText.substring(end);
             setLocalContent(updatedContent);
         } catch (error) {
-            console.error('Math Break Error:', error);
             alert('Failed to break math block: ' + error.message);
         } finally {
             setIsBreakingMath(false);
@@ -1690,7 +1392,7 @@ $$`
         c = c.replace(/:::explain\s+(.+?)\n([\s\S]*?)\n:::/g, (match, keyword, content) => {
             explanations.set(keyword.trim(), content.trim());
             const lineCount = (match.match(/\n/g) || []).length;
-            return '\n'.repeat(lineCount); 
+            return '\n'.repeat(lineCount);
         });
 
         const inlineExplainRegex = /\[\[(.+?)\]\]\(/g;
@@ -1767,9 +1469,9 @@ $$`
                     const processedInner = applyBalanced(inner);
                     const replacement = `<span class="${tag}">${processedInner}</span>`;
                     text = text.substring(0, start) + replacement + text.substring(j);
-                    regex.lastIndex = 0; 
+                    regex.lastIndex = 0;
                 } else {
-                    regex.lastIndex = open + 1; 
+                    regex.lastIndex = open + 1;
                 }
             }
             return text;
@@ -1810,7 +1512,7 @@ $$`
         placeholders.reverse().forEach(p => {
             c = c.split(p.key + p.padding).join(p.text);
         });
-        
+
         return c;
     }, [activeNote?.content]);
 
@@ -1832,18 +1534,18 @@ $$`
 
                 {/* --- NEW VIEW TOGGLES --- */}
                 <div className="view-toggles no-drag">
-                    <button 
-                        className={`btn-view ${viewMode === 'editor' ? 'active' : ''}`} 
+                    <button
+                        className={`btn-view ${viewMode === 'editor' ? 'active' : ''}`}
                         onClick={() => setViewMode('editor')} title="Editor Only">
                         <PenTool size={14} /> Write
                     </button>
-                    <button 
-                        className={`btn-view ${viewMode === 'split' ? 'active' : ''}`} 
+                    <button
+                        className={`btn-view ${viewMode === 'split' ? 'active' : ''}`}
                         onClick={() => setViewMode('split')} title="Split View">
                         <Columns size={14} /> Split
                     </button>
-                    <button 
-                        className={`btn-view ${viewMode === 'preview' ? 'active' : ''}`} 
+                    <button
+                        className={`btn-view ${viewMode === 'preview' ? 'active' : ''}`}
                         onClick={() => setViewMode('preview')} title="Preview Only">
                         <Eye size={14} /> Read
                     </button>
@@ -1856,7 +1558,7 @@ $$`
                     <button className="btn no-drag" onClick={() => setIsSettingsOpen(true)}>
                         <Settings size={18} />
                     </button>
-                    
+
                     {/* --- WINDOW CONTROLS --- */}
                     {window.electronAPI && window.electronAPI.windowMinimize && (
                         <div className="window-controls no-drag">
@@ -1875,7 +1577,7 @@ $$`
             </header>
 
             <main className="main-layout">
-                <aside 
+                <aside
                     className={`sidebar ${isSidebarOpen ? '' : 'collapsed'}`}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => handleDropNote(e, null)} // Drop on empty space to remove from folder
@@ -1893,12 +1595,12 @@ $$`
                             </button>
                             <input type="file" ref={importInputRef} style={{ display: 'none' }} accept=".poring" onChange={handleImportPoring} />
                         </div>
-                        
+
                         <div className="sidebar-search">
                             <Search size={14} className="search-icon" />
-                            <input 
-                                type="text" 
-                                placeholder="Search notes..." 
+                            <input
+                                type="text"
+                                placeholder="Search notes..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
@@ -1919,8 +1621,8 @@ $$`
                                 {folders.map(folder => {
                                     const isExpanded = expandedFolders[folder.id];
                                     return (
-                                        <div 
-                                            key={folder.id} 
+                                        <div
+                                            key={folder.id}
                                             className="folder-group"
                                             onDragOver={(e) => e.preventDefault()}
                                             onDrop={(e) => { e.stopPropagation(); handleDropNote(e, folder.id); }}
@@ -1935,11 +1637,11 @@ $$`
                                                 </div>
                                             </div>
                                             {isExpanded && notes.filter(n => n.folderId === folder.id).map(note => (
-                                                <div 
-                                                    key={note.id} 
+                                                <div
+                                                    key={note.id}
                                                     draggable
                                                     onDragStart={(e) => e.dataTransfer.setData('noteId', note.id)}
-                                                    className={`note-item child-note ${activeNoteId === note.id ? 'active' : ''}`} 
+                                                    className={`note-item child-note ${activeNoteId === note.id ? 'active' : ''}`}
                                                     onClick={() => setActiveNoteId(note.id)}
                                                 >
                                                     <FileText size={14} /> <span>{note.name}</span>
@@ -1954,14 +1656,14 @@ $$`
                                         </div>
                                     );
                                 })}
-                                
+
                                 {/* UNCATEGORIZED NOTES */}
                                 {notes.filter(n => !n.folderId).map(note => (
-                                    <div 
-                                        key={note.id} 
+                                    <div
+                                        key={note.id}
                                         draggable={note.id !== ABOUT_NOTE.id}
                                         onDragStart={(e) => e.dataTransfer.setData('noteId', note.id)}
-                                        className={`note-item ${activeNoteId === note.id ? 'active' : ''}`} 
+                                        className={`note-item ${activeNoteId === note.id ? 'active' : ''}`}
                                         onClick={() => setActiveNoteId(note.id)}
                                     >
                                         <FileText size={14} /> <span>{note.name}</span>
@@ -2149,26 +1851,35 @@ $$`
                                         onChange={onImageFileChange}
                                     />
                                 </div>
-                                <button 
-                                    className={`btn-auto-note ${isAutoNoteEnabled ? 'active' : ''}`} 
-                                    onClick={toggleAutoNote} 
-                                    disabled={!activeNote} 
-                                    title={isAutoNoteEnabled ? "Auto-Note: ON (Listening to Clipboard)" : "Auto-Note: OFF"}
-                                    style={{ 
-                                        background: isAutoNoteEnabled ? '#10b981' : 'transparent', 
-                                        color: isAutoNoteEnabled ? 'white' : 'inherit',
-                                        border: '1px solid #444', 
-                                        padding: '4px 8px', 
-                                        borderRadius: '4px', 
-                                        cursor: 'pointer', 
-                                        display: 'flex', 
-                                        alignItems: 'center', 
-                                        gap: '4px',
-                                        transition: 'all 0.3s ease'
+                                {/* --- MINIMALIST ICON-ONLY CLIPBOARD BUTTON --- */}
+                                <button
+                                    className={`btn-auto-note ${isAutoNoteEnabled ? 'active' : ''}`}
+                                    onClick={toggleAutoNote}
+                                    disabled={!activeNote}
+                                    title={
+                                        !isAutoNoteEnabled 
+                                            ? "Auto-Note: OFF" 
+                                            : isAiClipboardEnabled 
+                                                ? "Auto-Note: ON (AI Format Fixer Active)" 
+                                                : "Auto-Note: ON (Standard)"
+                                    }
+                                    style={{
+                                        background: isAutoNoteEnabled && isAiClipboardEnabled ? '#8b5cf6' : (isAutoNoteEnabled ? '#10b981' : 'transparent'),
+                                        color: isAutoNoteEnabled ? 'white' : 'var(--text-main)',
+                                        border: isAutoNoteEnabled ? 'none' : '1px solid var(--border-color)',
+                                        width: '34px',
+                                        height: '34px',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                        boxShadow: isAutoNoteEnabled && isAiClipboardEnabled ? '0 0 10px rgba(139, 92, 246, 0.5)' : 'none',
+                                        flexShrink: 0
                                     }}
                                 >
-                                    <ClipboardCheck size={14} /> 
-                                    {isAutoNoteEnabled && <span style={{fontSize: '10px', fontWeight: 'bold'}}>LISTENING</span>}
+                                    <ClipboardCheck size={18} />
                                 </button>
                                 {canUndoRefine && lastRefinedNoteId === activeNoteId && (
                                     <button className="btn-undo-refine" onClick={handleUndoRefine} title="Undo AI Change">
@@ -2230,106 +1941,137 @@ $$`
                 isSettingsOpen && (
                     <div className="modal-overlay">
                         <div className="modal-content">
-                            <h3>Groq API Settings</h3>
-                            <div className="api-keys-list">
-                                {apiKeys.map((key, idx) => (
-                                    <div key={idx} style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                        <input
-                                            type="radio"
-                                            name="selectedApiKey"
-                                            checked={activeApiKeyIndex === idx}
-                                            onChange={() => setActiveApiKeyIndex(idx)}
-                                            style={{ width: 'auto', margin: 0, cursor: 'pointer' }}
-                                            title={`Use API Key ${idx + 1} `}
-                                        />
-                                        <div className="api-key-input-group" style={{ flex: 1 }}>
-                                            <label>API Key {idx + 1}</label>
-                                            <input
-                                                type="password"
-                                                value={key}
-                                                onChange={(e) => {
-                                                    const newKeys = [...apiKeys];
-                                                    newKeys[idx] = e.target.value;
-                                                    setApiKeys(newKeys);
-                                                }}
-                                                placeholder={`gsk_key_0${idx + 1}...`}
-                                            />
+                            <X size={24} className="modal-close-top" onClick={() => setIsSettingsOpen(false)} />
+                            
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingRight: '30px' }}>
+                                <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Preferences</h3>
+                            </div>
+
+                            {/* --- AI PROVIDER SETTINGS --- */}
+                            <div className="modal-section">
+                                <div className="setting-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span>AI Provider Settings</span>
+                                    <select 
+                                        value={aiProvider} 
+                                        onChange={(e) => setAiProvider(e.target.value)}
+                                        style={{ padding: '4px 8px', borderRadius: '4px', background: 'var(--bg-sidebar)', color: 'var(--text-main)', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
+                                    >
+                                        <option value="gemini">Google Gemini</option>
+                                        <option value="groq">Groq (Llama)</option>
+                                    </select>
+                                </div>
+
+                                {aiProvider === 'gemini' ? (
+                                    <div className="api-keys-list">
+                                        <div className="api-key-input-group">
+                                            <label>Gemini API Key</label>
+                                            <input type="password" value={geminiApiKey} onChange={(e) => setGeminiApiKey(e.target.value)} placeholder="AIzaSy..." />
+                                        </div>
+                                        <div className="api-key-input-group">
+                                            <label>Select Model</label>
+                                            <select 
+                                                value={geminiModel} 
+                                                onChange={(e) => setGeminiModel(e.target.value)}
+                                                style={{ width: '100%', padding: '10px', borderRadius: '6px', background: 'var(--bg-modal-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}
+                                            >
+                                                {GEMINI_MODELS.map(m => (
+                                                    <option key={m.id} value={m.id}>{m.label}</option>
+                                                ))}
+                                            </select>
                                         </div>
                                     </div>
-                                ))}
+                                ) : (
+                                    <div className="api-keys-list">
+                                        {apiKeys.map((key, idx) => (
+                                            <div key={idx} style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                                <input type="radio" name="selectedApiKey" checked={activeApiKeyIndex === idx} onChange={() => setActiveApiKeyIndex(idx)} style={{ cursor: 'pointer' }} />
+                                                <div className="api-key-input-group" style={{ flex: 1 }}>
+                                                    <label>Groq API Key {idx + 1}</label>
+                                                    <input type="password" value={key} onChange={(e) => {
+                                                        const newKeys = [...apiKeys];
+                                                        newKeys[idx] = e.target.value;
+                                                        setApiKeys(newKeys);
+                                                    }} placeholder={`gsk_key_0${idx + 1}...`} />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
-                            <div className="modal-section" style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid #333' }}>
-                                <h4>Editor & Image Settings</h4>
-                                <div className="settings-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '10px' }}>
+
+                            {/* --- AI CLIPBOARD SETTING --- */}
+                            <div className="modal-section">
+                                <div className="setting-section-title">Clipboard AI Processing</div>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-sidebar)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        <strong style={{ fontSize: '0.9rem' }}>Enable AI Format Fixer</strong>
+                                        <span style={{ fontSize: '0.75rem', opacity: 0.7, maxWidth: '250px' }}>
+                                            Automatically fixes broken math (like missing roots or brackets) when pasting from PDFs. Keeps identical text unchanged.
+                                        </span>
+                                    </div>
+                                    <button 
+                                        onClick={toggleAiClipboard}
+                                        style={{
+                                            padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', border: 'none',
+                                            background: isAiClipboardEnabled ? '#8b5cf6' : 'var(--bg-editor)',
+                                            color: isAiClipboardEnabled ? 'white' : 'var(--text-main)',
+                                            border: isAiClipboardEnabled ? 'none' : '1px solid var(--border-color)'
+                                        }}
+                                    >
+                                        {isAiClipboardEnabled ? 'ON' : 'OFF'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* --- EDITOR & IMAGE SETTINGS --- */}
+                            <div className="modal-section">
+                                <div className="setting-section-title">Editor & Image Settings</div>
+                                <div className="settings-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                                     <div className="setting-item">
-                                        <label>Pasted Image Width (px)</label>
-                                        <input
-                                            type="number"
-                                            value={imageWidths.pasted}
-                                            onChange={(e) => setImageWidths({ ...imageWidths, pasted: parseInt(e.target.value) || 300 })}
-                                        />
+                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Pasted Image Width (px)</label>
+                                        <input type="number" value={imageWidths.pasted} onChange={(e) => setImageWidths({ ...imageWidths, pasted: parseInt(e.target.value) || 300 })} style={{ width: '100%', padding: '10px', borderRadius: '6px', background: 'var(--bg-modal-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }} />
                                     </div>
                                     <div className="setting-item">
-                                        <label>Auto-Note Image Width (px)</label>
-                                        <input
-                                            type="number"
-                                            value={imageWidths.autoNote}
-                                            onChange={(e) => setImageWidths({ ...imageWidths, autoNote: parseInt(e.target.value) || 450 })}
-                                        />
+                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Auto-Note Image Width (px)</label>
+                                        <input type="number" value={imageWidths.autoNote} onChange={(e) => setImageWidths({ ...imageWidths, autoNote: parseInt(e.target.value) || 450 })} style={{ width: '100%', padding: '10px', borderRadius: '6px', background: 'var(--bg-modal-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }} />
                                     </div>
                                 </div>
                             </div>
-                            <div className="modal-section" style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid var(--border-color)' }}>
-                                <h4 style={{ marginBottom: '10px', fontSize: '0.85rem', color: 'var(--accent)', textTransform: 'uppercase' }}>Typography & Spacing</h4>
+
+                            {/* --- TYPOGRAPHY & SPACING --- */}
+                            <div className="modal-section">
+                                <div className="setting-section-title">Typography & Spacing</div>
                                 <div className="settings-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                                    <div className="setting-item" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Font Family</label>
-                                        <select
-                                            value={typography.font}
-                                            onChange={(e) => setTypography({ ...typography, font: e.target.value })}
-                                            style={{ padding: '8px', background: 'var(--bg-modal-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)', borderRadius: '6px' }}
-                                        >
+                                    <div className="setting-item">
+                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Font Family</label>
+                                        <select value={typography.font} onChange={(e) => setTypography({ ...typography, font: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', background: 'var(--bg-modal-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}>
                                             <option value="Sans">Modern (Sans)</option>
                                             <option value="Serif">LaTeX (Standard)</option>
                                             <option value="Mono">Code (Mono)</option>
                                         </select>
                                     </div>
-                                    <div className="setting-item" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Line Spacing</label>
-                                        <select
-                                            value={spacing}
-                                            onChange={(e) => setSpacing(e.target.value)}
-                                            style={{ padding: '8px', background: 'var(--bg-modal-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)', borderRadius: '6px' }}
-                                        >
+                                    <div className="setting-item">
+                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Line Spacing</label>
+                                        <select value={spacing} onChange={(e) => setSpacing(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', background: 'var(--bg-modal-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}>
                                             <option value="Too narrow">Too narrow</option>
                                             <option value="narrow">Narrow</option>
                                             <option value="normal">Normal</option>
                                             <option value="wide">Wide</option>
                                         </select>
                                     </div>
-                                    <div className="setting-item" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>Font Size (px)</label>
-                                        <input
-                                            type="number"
-                                            value={typography.size}
-                                            onChange={(e) => setTypography({ ...typography, size: parseInt(e.target.value) })}
-                                            style={{ padding: '8px' }}
-                                        />
-                                    </div>
+                                </div>
+                                <div className="setting-item" style={{ marginTop: '15px' }}>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Font Size (px)</label>
+                                    <input type="number" value={typography.size} onChange={(e) => setTypography({ ...typography, size: parseInt(e.target.value) })} style={{ width: '100%', padding: '10px', borderRadius: '6px', background: 'var(--bg-modal-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }} />
                                 </div>
                             </div>
-                            <div className="modal-btns">
-                                <a
-                                    href="https://console.groq.com/keys"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="btn-get-api"
-                                >
+
+                            <div className="modal-btns" style={{ paddingTop: '10px' }}>
+                                <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" className="btn-get-api">
                                     <ExternalLink size={14} /> Get API Key
                                 </a>
                                 <div style={{ flex: 1 }} />
-                                <button onClick={() => setIsSettingsOpen(false)}>Close</button>
-                                <button className="btn-primary" onClick={() => setIsSettingsOpen(false)}>Save</button>
+                                <button className="btn-primary" onClick={() => setIsSettingsOpen(false)}>Save & Close</button>
                             </div>
                         </div>
                     </div>

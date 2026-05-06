@@ -1418,15 +1418,43 @@ The margin here is CRITICAL for vertical breathing room.
 
 .modal-content {
   background: var(--bg-editor);
-  padding: 30px;
+  padding: 30px 30px 20px 30px;
   border-radius: 12px;
-  width: 450px;
+  width: 500px;
+  max-height: 85vh; /* Makes it fit the screen */
+  overflow-y: auto; /* Makes it scrollable */
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 25px; /* Less dense */
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
   color: var(--text-main);
   border: 1px solid var(--border-color);
+  position: relative; /* For the top-right close button */
+}
+
+.modal-close-top {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  color: var(--text-main);
+}
+.modal-close-top:hover {
+  opacity: 1;
+  color: #ff4d4d;
+}
+
+.setting-section-title {
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  color: var(--accent);
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 6px;
 }
 
 .api-keys-list {

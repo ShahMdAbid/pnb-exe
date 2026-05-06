@@ -13,6 +13,7 @@
         "preview": "node ./node_modules/vite/bin/vite.js preview"
     },
     "dependencies": {
+        "@google/genai": "^1.52.0",
         "cors": "^2.8.6",
         "dotenv": "^17.4.2",
         "express": "^5.2.1",
