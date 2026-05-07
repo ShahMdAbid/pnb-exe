@@ -37,7 +37,8 @@ export const exportPoringFile = async (noteTitle, markdownContent) => {
 
         // 4. Generate the ZIP file and trigger download
         const content = await zip.generateAsync({ type: "blob" });
-        saveAs(content, `${noteTitle}.poring`);
+        // Change from .poring to .zip
+        saveAs(content, `${noteTitle}.zip`);
         return true;
 
     } catch (error) {
@@ -78,7 +79,7 @@ export const importPoringFile = async (file) => {
 
     } catch (error) {
         console.error("Import failed:", error);
-        alert("Import failed: Invalid or corrupted .poring file.");
+        alert("Import failed: Invalid or corrupted .zip file.");
         return null;
     }
 };

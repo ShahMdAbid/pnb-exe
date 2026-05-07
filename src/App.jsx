@@ -268,7 +268,7 @@ const PageGuides = ({ contentRef }) => {
                 <div key={index} className="page-guide" style={{ top: `${guide.position}px` }}>
                     <div className="danger-zone" />
                     <div className="guide-line" />
-                    <span className="guide-label">PAGE BREAK {guide.pageNumber}</span>
+                    <span className="guide-label">{guide.pageNumber}</span>
                 </div>
             ))}
         </div>
@@ -446,7 +446,7 @@ function App() {
     useEffect(() => {
         localStorage.setItem('poring_welcome_seen', 'true');
     }, []);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [expandedFolders, setExpandedFolders] = useState({});
     const [typography, setTypography] = useState(() => JSON.parse(localStorage.getItem('poring_typography')) || { font: 'Sans', size: 13 });
     const [spacing, setSpacing] = useState(localStorage.getItem('poring_spacing') || 'normal');
@@ -1590,10 +1590,10 @@ function App() {
                             <button className="sidebar-icon-btn" onClick={() => createFolder()} title="New Folder">
                                 <FolderPlus size={16} />
                             </button>
-                            <button className="sidebar-icon-btn" onClick={() => importInputRef.current?.click()} title="Import .poring">
+                            <button className="sidebar-icon-btn" onClick={() => importInputRef.current?.click()} title="Import .zip">
                                 <Upload size={16} />
                             </button>
-                            <input type="file" ref={importInputRef} style={{ display: 'none' }} accept=".poring" onChange={handleImportPoring} />
+                            <input type="file" ref={importInputRef} style={{ display: 'none' }} accept=".zip" onChange={handleImportPoring} />
                         </div>
 
                         <div className="sidebar-search">
@@ -1910,8 +1910,8 @@ function App() {
                         <div className="preview-header">
                             <span>PDF Preview</span>
                             <div style={{ display: 'flex', gap: '8px' }}>
-                                <button className="btn-export" onClick={handleExportPoring} disabled={!activeNote} title="Export as .poring file">
-                                    <Download size={14} /> .poring
+                                <button className="btn-export" onClick={handleExportPoring} disabled={!activeNote} title="Export as .zip file">
+                                    <Download size={14} /> .zip
                                 </button>
                                 <button className="btn-export" onClick={handleDownloadPDF} disabled={!activeNote} title="Export as PDF">
                                     <Download size={14} /> PDF

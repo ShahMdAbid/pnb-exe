@@ -12,7 +12,7 @@
   --bg-dark: #1e1e1e;
   --bg-sidebar: #f8f8f8;
   --bg-editor: #fdfdfd;
-  --bg-preview: #525659;
+  --bg-preview: #ffffff; /* Changed from #525659 to seamlessly blend with the PDF page */
   --accent: #3b82f6;
   --text-main: #232323;
   --text-sidebar: #232323;
@@ -25,10 +25,8 @@
   --bg-dark: #121212;
   --bg-sidebar: #0f0f0f;
   --bg-editor: #16161e;
-  /* Deeper dark for high contrast */
-  --bg-preview: #525659;
+  --bg-preview: #ffffff; /* Keep white in dark mode to blend with the white A4 paper */
   --text-main: #ffffff !important;
-  /* Force pure white for everything in dark theme */
   --text-sidebar: #e0e0e0;
   --border-color: #333333;
   --bg-modal-input: #121212;
@@ -1008,18 +1006,18 @@ html,
 /* Preview Sector */
 .preview-pane {
   flex: 1;
-  background: #525659 !important;
-  /* Force neutral background */
+  background: var(--bg-preview) !important; /* This will now be white */
   overflow-y: auto;
+  overflow-x: auto;
   padding: 0 0 40px 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
   min-width: 0;
 }
 
 .preview-header {
   width: 100%;
+  min-width: max-content; /* Forces it to cover scroll width */
   padding: 10px 20px;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-editor);
@@ -1030,6 +1028,7 @@ html,
   color: var(--text-main);
   position: sticky;
   top: 0;
+  left: 0; /* Sticks to the left edge when scrolling right */
   z-index: 100;
 }
 
@@ -1039,13 +1038,11 @@ html,
   gap: 0;
   position: relative;
   width: 100%;
-  align-items: center;
 }
 
 
 .page-container {
   background: white !important;
-  /* Always white */
   width: 210mm;
   min-height: 297mm;
   padding: 20mm;
@@ -1053,26 +1050,28 @@ html,
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  box-shadow: none !important; /* Ensures seamless blend with the background */
+  border: none !important;
 }
 
 /* Page Guides */
-.pages-stack {
-  position: relative;
-}
-
 .preview-content {
   position: relative;
+  margin: 0 auto; /* Safely centers the A4 page without clipping the left side */
+  display: flex;
+  flex-direction: column;
 }
 
 .page-guides-container {
   position: absolute;
   top: 0;
   left: 0;
-  width: 100%;
+  right: 0;
+  margin: 0 auto; /* Centers perfectly over the paper */
+  width: 210mm; /* Forces exact paper width */
   height: 100%;
   pointer-events: none;
   z-index: 50;
-  overflow: hidden;
 }
 
 .page-guide {
@@ -1083,9 +1082,9 @@ html,
 
 .danger-zone {
   position: absolute;
-  top: -4px;
+  top: -2px; /* Thinner */
   width: 100%;
-  height: 8px;
+  height: 4px; /* Thinner */
   background: rgba(239, 68, 68, 0.1);
   border-top: 1px solid rgba(239, 68, 68, 0.2);
   border-bottom: 1px solid rgba(239, 68, 68, 0.2);
@@ -1093,23 +1092,21 @@ html,
 
 .guide-line {
   width: 100%;
-  border-bottom: 1.5px dashed rgba(239, 68, 68, 0.5);
+  border-bottom: 1px dashed rgba(239, 68, 68, 0.4); /* Thinner and softer */
 }
 
 .guide-label {
   position: absolute;
-  right: 16px;
-  top: -22px;
+  right: 0; /* Align flush right to the paper edge */
+  top: -10px; /* Vertically center on the new thin line */
   font-size: 10px;
   font-weight: 800;
   color: #dc2626;
   background: white;
-  padding: 3px 8px;
-  border-radius: 6px;
-  box-shadow: 0 2px 4px rgba(220, 38, 38, 0.15);
-  border: 1.5px solid #fecaca;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.15);
+  border: 1px solid #fecaca;
   z-index: 60;
 }
 
