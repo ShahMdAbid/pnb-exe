@@ -34,7 +34,8 @@ const poringTheme = EditorView.theme({
     // --- CUSTOM PORING COLORS ---
     ".cm-poring-keyword": { color: "#b91c1c", fontWeight: "bold" },
     ".cm-poring-spacer": { color: "#888", fontStyle: "italic" },
-    ".cm-poring-math": { color: "#d32f2f", backgroundColor: "rgba(0,0,0,0.03)", borderRadius: "3px" },
+    ".cm-poring-inline-math": { color: "#d32f2f", backgroundColor: "rgba(211,47,47,0.05)", borderRadius: "3px", padding: "0 2px" },
+    ".cm-poring-block-math": { color: "#1976d2", backgroundColor: "rgba(25,118,210,0.05)", borderRadius: "4px", fontWeight: "bold" },
     ".cm-poring-explanation": { color: "#3b82f6", textDecoration: "underline" }
 });
 
@@ -85,7 +86,11 @@ const ColorfulEditor = ({ value, onChange, onPaste, placeholder, editorViewRef }
                     createMatchPlugin(/\b(red|blue|green|orange|purple|gray|center|right|left)(?=\[)/g, "cm-poring-keyword"),
                     createMatchPlugin(/\[today\]/g, "cm-poring-keyword"),
                     createMatchPlugin(/^\s*\/\/\d+/gm, "cm-poring-spacer"),
-                    createMatchPlugin(/\$[^$\n]+\$/g, "cm-poring-math"),
+                    
+                    // NEW MATH REGEXES
+                    createMatchPlugin(/\$\$[\s\S]*?\$\$/g, "cm-poring-block-math"), // Blue & Bold for Block
+                    createMatchPlugin(/(?<!\$)\$[^$\n]+\$(?!\$)/g, "cm-poring-inline-math"), // Red for Inline
+                    
                     createMatchPlugin(/\[\[.*?\]\]\(.*?\)/g, "cm-poring-explanation")
                 ]}
                 placeholder={placeholder}

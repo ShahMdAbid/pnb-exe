@@ -12,7 +12,8 @@
   --bg-dark: #1e1e1e;
   --bg-sidebar: #f8f8f8;
   --bg-editor: #fdfdfd;
-  --bg-preview: #ffffff; /* Changed from #525659 to seamlessly blend with the PDF page */
+  --bg-preview: #ffffff;
+  /* Changed from #525659 to seamlessly blend with the PDF page */
   --accent: #3b82f6;
   --text-main: #232323;
   --text-sidebar: #232323;
@@ -25,7 +26,8 @@
   --bg-dark: #121212;
   --bg-sidebar: #0f0f0f;
   --bg-editor: #16161e;
-  --bg-preview: #ffffff; /* Keep white in dark mode to blend with the white A4 paper */
+  --bg-preview: #ffffff;
+  /* Keep white in dark mode to blend with the white A4 paper */
   --text-main: #ffffff !important;
   --text-sidebar: #e0e0e0;
   --border-color: #333333;
@@ -1006,7 +1008,8 @@ html,
 /* Preview Sector */
 .preview-pane {
   flex: 1;
-  background: var(--bg-preview) !important; /* This will now be white */
+  background: var(--bg-preview) !important;
+  /* This will now be white */
   overflow-y: auto;
   overflow-x: auto;
   padding: 0 0 40px 0;
@@ -1017,7 +1020,8 @@ html,
 
 .preview-header {
   width: 100%;
-  min-width: max-content; /* Forces it to cover scroll width */
+  min-width: max-content;
+  /* Forces it to cover scroll width */
   padding: 10px 20px;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-editor);
@@ -1028,7 +1032,8 @@ html,
   color: var(--text-main);
   position: sticky;
   top: 0;
-  left: 0; /* Sticks to the left edge when scrolling right */
+  left: 0;
+  /* Sticks to the left edge when scrolling right */
   z-index: 100;
 }
 
@@ -1050,14 +1055,16 @@ html,
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  box-shadow: none !important; /* Ensures seamless blend with the background */
+  box-shadow: none !important;
+  /* Ensures seamless blend with the background */
   border: none !important;
 }
 
 /* Page Guides */
 .preview-content {
   position: relative;
-  margin: 0 auto; /* Safely centers the A4 page without clipping the left side */
+  margin: 0 auto;
+  /* Safely centers the A4 page without clipping the left side */
   display: flex;
   flex-direction: column;
 }
@@ -1067,8 +1074,10 @@ html,
   top: 0;
   left: 0;
   right: 0;
-  margin: 0 auto; /* Centers perfectly over the paper */
-  width: 210mm; /* Forces exact paper width */
+  margin: 0 auto;
+  /* Centers perfectly over the paper */
+  width: 210mm;
+  /* Forces exact paper width */
   height: 100%;
   pointer-events: none;
   z-index: 50;
@@ -1082,9 +1091,11 @@ html,
 
 .danger-zone {
   position: absolute;
-  top: -2px; /* Thinner */
+  top: -2px;
+  /* Thinner */
   width: 100%;
-  height: 4px; /* Thinner */
+  height: 4px;
+  /* Thinner */
   background: rgba(239, 68, 68, 0.1);
   border-top: 1px solid rgba(239, 68, 68, 0.2);
   border-bottom: 1px solid rgba(239, 68, 68, 0.2);
@@ -1092,13 +1103,16 @@ html,
 
 .guide-line {
   width: 100%;
-  border-bottom: 1px dashed rgba(239, 68, 68, 0.4); /* Thinner and softer */
+  border-bottom: 1px dashed rgba(239, 68, 68, 0.4);
+  /* Thinner and softer */
 }
 
 .guide-label {
   position: absolute;
-  right: 0; /* Align flush right to the paper edge */
-  top: -10px; /* Vertically center on the new thin line */
+  right: 0;
+  /* Align flush right to the paper edge */
+  top: -10px;
+  /* Vertically center on the new thin line */
   font-size: 10px;
   font-weight: 800;
   color: #dc2626;
@@ -1418,15 +1432,19 @@ The margin here is CRITICAL for vertical breathing room.
   padding: 30px 30px 20px 30px;
   border-radius: 12px;
   width: 500px;
-  max-height: 85vh; /* Makes it fit the screen */
-  overflow-y: auto; /* Makes it scrollable */
+  max-height: 85vh;
+  /* Makes it fit the screen */
+  overflow-y: auto;
+  /* Makes it scrollable */
   display: flex;
   flex-direction: column;
-  gap: 25px; /* Less dense */
+  gap: 25px;
+  /* Less dense */
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
   color: var(--text-main);
   border: 1px solid var(--border-color);
-  position: relative; /* For the top-right close button */
+  position: relative;
+  /* For the top-right close button */
 }
 
 .modal-close-top {
@@ -1438,6 +1456,7 @@ The margin here is CRITICAL for vertical breathing room.
   transition: opacity 0.2s;
   color: var(--text-main);
 }
+
 .modal-close-top:hover {
   opacity: 1;
   color: #ff4d4d;
@@ -1991,13 +2010,14 @@ The margin here is CRITICAL for vertical breathing room.
 
 /* Window Drag & Control Styles */
 .header {
-  -webkit-app-region: drag; /* Makes the header act like a title bar */
+  -webkit-app-region: drag;
+  /* Makes the header act like a title bar */
 }
 
 /* IMPORTANT: Everything clickable inside the header must have no-drag */
-.header button, 
-.header select, 
-.header input, 
+.header button,
+.header select,
+.header input,
 .no-drag {
   -webkit-app-region: no-drag;
 }
@@ -2028,7 +2048,8 @@ The margin here is CRITICAL for vertical breathing room.
 }
 
 .window-btn.close:hover {
-  background: #e81123; /* Windows native red close color */
+  background: #e81123;
+  /* Windows native red close color */
   color: white;
 }
 
@@ -2066,8 +2087,9 @@ The margin here is CRITICAL for vertical breathing room.
 }
 
 /* FIX THE SQUISHED TEXT BUG YOU SHOWED IN YOUR SCREENSHOTS */
-.editor-pane, .preview-pane {
-  min-width: 0 !important; 
+.editor-pane,
+.preview-pane {
+  min-width: 0 !important;
 }
 
 .header {
@@ -2076,15 +2098,59 @@ The margin here is CRITICAL for vertical breathing room.
 }
 
 .header-right {
-  flex-shrink: 0; /* Prevents the window controls from being squished */
+  flex-shrink: 0;
+  /* Prevents the window controls from being squished */
 }
 
 .view-toggles {
-  flex-shrink: 1; /* Allows the middle section to adapt if screen is tiny */
+  flex-shrink: 1;
+  /* Allows the middle section to adapt if screen is tiny */
   min-width: 0;
   overflow-x: auto;
 }
 
 .view-toggles::-webkit-scrollbar {
-  display: none; /* Hides scrollbar in the header if it gets too tight */
+  display: none;
+  /* Hides scrollbar in the header if it gets too tight */
+}
+
+/* --- INLINE FORMATTING TOOLBAR --- */
+.format-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-sidebar);
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  margin-right: 8px;
+}
+
+.format-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: all 0.2s;
+}
+
+.format-btn:hover {
+  background: var(--bg-editor);
+  opacity: 1;
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border-color);
+  margin: 0 4px;
 }
