@@ -22,12 +22,12 @@ import {
 import 'katex/dist/katex.min.css';
 import './App.css';
 import guideContent from './guide.md?raw';
-import { 
-    processAiRequest, 
-    MAGIC_REFINE_PROMPT, 
-    CUSTOM_REFINE_SYSTEM_PROMPT, 
+import {
+    processAiRequest,
+    MAGIC_REFINE_PROMPT,
+    CUSTOM_REFINE_SYSTEM_PROMPT,
     BREAK_MATH_PROMPT,
-    CLIPBOARD_FIXER_PROMPT 
+    CLIPBOARD_FIXER_PROMPT
 } from './utils/aiService';
 
 // --- HELPER: Database Persistence ---
@@ -471,11 +471,11 @@ function App() {
     const [aiProvider, setAiProvider] = useState(() => localStorage.getItem('poring_ai_provider') || 'gemini');
     const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem('poring_gemini_key') || '');
     const [geminiModel, setGeminiModel] = useState(() => localStorage.getItem('poring_gemini_model') || 'gemini-2.5-flash-lite');
-    
+
     // AI Clipboard Filter State
     const [isAiClipboardEnabled, setIsAiClipboardEnabled] = useState(false);
     const isAiClipboardEnabledRef = useRef(false);
-    
+
     const toggleAiClipboard = () => {
         const newState = !isAiClipboardEnabled;
         setIsAiClipboardEnabled(newState);
@@ -541,7 +541,7 @@ function App() {
     const previewRef = useRef(null);
 
     const aiConfigRef = useRef({ aiProvider, geminiApiKey, geminiModel, apiKeys, activeApiKeyIndex });
-    
+
     // Keep the ref updated whenever settings change
     useEffect(() => {
         aiConfigRef.current = { aiProvider, geminiApiKey, geminiModel, apiKeys, activeApiKeyIndex };
@@ -564,7 +564,7 @@ function App() {
             localStorage.setItem('poring_custom_templates', JSON.stringify(customTemplates));
             localStorage.setItem('poring_saved_custom_instructions', JSON.stringify(savedCustomInstructions));
             localStorage.setItem('poring_image_widths', JSON.stringify(imageWidths));
-            
+
             // NEW SAVES:
             localStorage.setItem('poring_ai_provider', aiProvider);
             localStorage.setItem('poring_gemini_key', geminiApiKey);
@@ -586,7 +586,7 @@ function App() {
                     // FLOW: Copied Text -> AI -> Editor
                     if (isAiClipboardEnabledRef.current) {
                         showToast("AI is cleaning clipboard text...");
-                        
+
                         // Access current settings from Ref
                         const { aiProvider: provider, geminiApiKey: gKey, geminiModel: gModel, apiKeys: groqKeys, activeApiKeyIndex: groqIdx } = aiConfigRef.current;
 
@@ -895,7 +895,7 @@ function App() {
 
         try {
             let refinedText = await processAiRequest(config);
-            
+
             // Sanitizer: Remove markdown code fences if AI added them
             if (refinedText.startsWith('```')) {
                 refinedText = refinedText.replace(/^```[a-zA-Z]*\n/, '').replace(/\n```$/, '');
@@ -942,7 +942,7 @@ function App() {
 
         try {
             let refinedText = await processAiRequest(config);
-            
+
             if (refinedText.startsWith('```')) {
                 refinedText = refinedText.replace(/^```[a-zA-Z]*\n/, '').replace(/\n```$/, '');
             }
@@ -1857,10 +1857,10 @@ function App() {
                                     onClick={toggleAutoNote}
                                     disabled={!activeNote}
                                     title={
-                                        !isAutoNoteEnabled 
-                                            ? "Auto-Note: OFF" 
-                                            : isAiClipboardEnabled 
-                                                ? "Auto-Note: ON (AI Format Fixer Active)" 
+                                        !isAutoNoteEnabled
+                                            ? "Auto-Note: OFF"
+                                            : isAiClipboardEnabled
+                                                ? "Auto-Note: ON (AI Format Fixer Active)"
                                                 : "Auto-Note: ON (Standard)"
                                     }
                                     style={{
@@ -1942,7 +1942,7 @@ function App() {
                     <div className="modal-overlay">
                         <div className="modal-content">
                             <X size={24} className="modal-close-top" onClick={() => setIsSettingsOpen(false)} />
-                            
+
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingRight: '30px' }}>
                                 <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Preferences</h3>
                             </div>
@@ -1951,8 +1951,8 @@ function App() {
                             <div className="modal-section">
                                 <div className="setting-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <span>AI Provider Settings</span>
-                                    <select 
-                                        value={aiProvider} 
+                                    <select
+                                        value={aiProvider}
                                         onChange={(e) => setAiProvider(e.target.value)}
                                         style={{ padding: '4px 8px', borderRadius: '4px', background: 'var(--bg-sidebar)', color: 'var(--text-main)', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
                                     >
@@ -1969,8 +1969,8 @@ function App() {
                                         </div>
                                         <div className="api-key-input-group">
                                             <label>Select Model</label>
-                                            <select 
-                                                value={geminiModel} 
+                                            <select
+                                                value={geminiModel}
                                                 onChange={(e) => setGeminiModel(e.target.value)}
                                                 style={{ width: '100%', padding: '10px', borderRadius: '6px', background: 'var(--bg-modal-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}
                                             >
@@ -2009,7 +2009,7 @@ function App() {
                                             Automatically fixes broken math (like missing roots or brackets) when pasting from PDFs. Keeps identical text unchanged.
                                         </span>
                                     </div>
-                                    <button 
+                                    <button
                                         onClick={toggleAiClipboard}
                                         style={{
                                             padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', border: 'none',

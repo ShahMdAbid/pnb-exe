@@ -17,6 +17,28 @@ function createWindow() {
     },
   });
 
+  // --- START: MANUAL ZOOM OVERRIDE ---
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    // Check for Ctrl on Windows/Linux, or Cmd on macOS
+    const isZoomModifier = process.platform === 'darwin' ? input.meta : input.control;
+    
+    if (isZoomModifier && input.type === 'keyDown') {
+      if (input.key === '=' || input.key === '+') {
+        const currentZoom = mainWindow.webContents.getZoomLevel();
+        mainWindow.webContents.setZoomLevel(currentZoom + 0.5);
+        event.preventDefault();
+      } else if (input.key === '-') {
+        const currentZoom = mainWindow.webContents.getZoomLevel();
+        mainWindow.webContents.setZoomLevel(currentZoom - 0.5);
+        event.preventDefault();
+      } else if (input.key === '0') {
+        mainWindow.webContents.setZoomLevel(0);
+        event.preventDefault();
+      }
+    }
+  });
+  // --- END: MANUAL ZOOM OVERRIDE ---
+
   const isDev = process.env.NODE_ENV === 'development';
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');

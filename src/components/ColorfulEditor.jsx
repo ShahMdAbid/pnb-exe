@@ -65,10 +65,18 @@ Prism.languages.insertBefore('poring', 'prolog', {
         pattern: /\[today\]/,
         alias: 'keyword'
     },
-    'poring-math': {
-        pattern: /\$\$?[\s\S]*?\$?$/,
-        alias: 'important'
-    },
+    'poring-math': [
+        {
+            // Block Math: $$ ... $$ (can span multiple lines safely)
+            pattern: /\$\$[\s\S]*?\$\$/,
+            alias: 'important'
+        },
+        {
+            // Inline Math: $ ... $ (strictly bound to a single line to prevent catastrophic backtracking)
+            pattern: /\$[^$\n]+\$/,
+            alias: 'important'
+        }
+    ],
     'poring-indent': {
         pattern: /^[\s\.]*\.+/m,
         alias: 'comment'
