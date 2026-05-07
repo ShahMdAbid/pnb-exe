@@ -11,6 +11,7 @@ import localforage from 'localforage';
 import { saveAs } from 'file-saver';
 import { exportPoringFile, importPoringFile } from './utils/poringFileHandler';
 import ColorfulEditor from './components/ColorfulEditor';
+import { EditorView } from '@codemirror/view';
 import {
     Plus, FolderPlus, Folder, FileText, ChevronLeft, ChevronRight,
     Download, Trash2, Edit3, ChevronDown, Sun, Moon, Sparkles,
@@ -79,46 +80,7 @@ center[####Submission date : [today]]
 `
 };
 
-// --- HELPER: Exact Text Position Calculator ---
-const getCaretCoordinates = (element, position) => {
-    const div = document.createElement('div');
-    const style = window.getComputedStyle(element);
 
-    // Copy all font/layout properties strictly
-    const properties = [
-        'direction', 'boxSizing', 'overflowX', 'overflowY',
-        'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
-        'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-        'fontStyle', 'fontVariant', 'fontWeight', 'fontStretch', 'fontSize',
-        'fontSizeAdjust', 'lineHeight', 'fontFamily', 'textAlign',
-        'textTransform', 'textIndent', 'textDecoration', 'letterSpacing', 'wordSpacing',
-        'tabSize', 'MozTabSize', 'whiteSpace', 'wordWrap'
-    ];
-
-    properties.forEach(prop => {
-        div.style[prop] = style[prop];
-    });
-
-    // CRITICAL: Force the clone to match the editor's inner width exactly
-    div.style.width = `${element.clientWidth}px`;
-
-    // Hide it but keep it in the DOM to measure
-    div.style.position = 'absolute';
-    div.style.visibility = 'hidden';
-    div.style.top = '0px';
-    div.textContent = element.value.substring(0, position);
-
-    // The span represents the cursor position
-    const span = document.createElement('span');
-    span.textContent = '|';
-    div.appendChild(span);
-
-    document.body.appendChild(div);
-    const top = span.offsetTop + parseInt(style.borderTopWidth || 0);
-    document.body.removeChild(div);
-
-    return top;
-};
 
 // --- PDF CONFIGURATION ---
 const PDF_CONFIG = {
@@ -719,64 +681,55 @@ function App() {
     const handleInsertTable = async () => {
         const input = await requestPrompt("Table dimensions (e.g., 3x3):", "3x3");
         if (!input) return;
-
         const match = input.match(/(\d+)\s*[xX*]\s*(\d+)/);
         if (!match) {
             showToast("Invalid format. Use 3x3 or 3*3");
             return;
         }
-
         const rows = parseInt(match[1], 10);
         const cols = parseInt(match[2], 10);
-
         if (rows <= 0 || cols <= 0) {
             showToast("Dimensions must be positive");
             return;
         }
-
         let tableMd = "\n";
-        // Header
         tableMd += "| " + Array(cols).fill("Header").join(" | ") + " |\n";
-        // Separator
         tableMd += "| " + Array(cols).fill("---").join(" | ") + " |\n";
-        // Rows
         for (let i = 0; i < rows; i++) {
             tableMd += "| " + Array(cols).fill("Cell").join(" | ") + " |\n";
         }
         tableMd += "\n";
-
-        const textarea = editorRef.current;
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const fullText = localContent;
-        const newText = fullText.substring(0, start) + tableMd + fullText.substring(end);
-
-        setLocalContent(newText);
+        
+        const view = editorRef.current;
+        if (view) {
+            const { from, to } = view.state.selection.main;
+            view.dispatch({
+                changes: { from, to, insert: tableMd },
+                selection: { anchor: from + tableMd.length }
+            });
+            view.focus();
+        }
+        
         setIsInsertMenuOpen(false);
         showToast(`Inserted ${rows}x${cols} Table`);
-
-        setTimeout(() => {
-            textarea.selectionStart = textarea.selectionEnd = start + tableMd.length;
-            textarea.focus();
-        }, 0);
     };
 
     const onImageFileChange = async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
-
         try {
             const key = await saveImageToDB(file);
             const markdown = `![Image | ${imageWidths.pasted}](${key})`;
-            const textarea = editorRef.current;
-            const start = textarea.selectionStart;
-            const end = textarea.selectionEnd;
-            const newText = localContent.substring(0, start) + markdown + localContent.substring(end);
-            setLocalContent(newText);
-            setTimeout(() => {
-                textarea.selectionStart = textarea.selectionEnd = start + markdown.length;
-                textarea.focus();
-            }, 0);
+            
+            const view = editorRef.current;
+            if (view) {
+                const { from, to } = view.state.selection.main;
+                view.dispatch({
+                    changes: { from, to, insert: markdown },
+                    selection: { anchor: from + markdown.length }
+                });
+                view.focus();
+            }
         } catch (err) {
             console.error("Image insert failed:", err);
             alert("Failed to insert image.");
@@ -828,12 +781,16 @@ function App() {
                 try {
                     const key = await saveImageToDB(blob);
                     const markdown = `![Image | ${imageWidths.pasted}](${key})`;
-                    const textarea = editorRef.current;
-                    const start = textarea.selectionStart;
-                    const end = textarea.selectionEnd;
-                    const newText = localContent.substring(0, start) + markdown + localContent.substring(end);
-                    setLocalContent(newText);
-                    setTimeout(() => { textarea.selectionStart = textarea.selectionEnd = start + markdown.length; }, 0);
+                    
+                    const view = editorRef.current;
+                    if (view) {
+                        const { from, to } = view.state.selection.main;
+                        view.dispatch({
+                            changes: { from, to, insert: markdown },
+                            selection: { anchor: from + markdown.length }
+                        });
+                        view.focus();
+                    }
                 } catch (err) {
                     console.error("Paste failed:", err);
                 }
@@ -871,11 +828,11 @@ function App() {
     };
 
     const handleMagicRefine = async () => {
-        const textarea = editorRef.current;
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const fullText = localContent;
-        const selectedText = fullText.substring(start, end);
+        const view = editorRef.current;
+        if (!view) return;
+        const { from, to } = view.state.selection.main;
+        const fullText = view.state.doc.toString();
+        const selectedText = view.state.sliceDoc(from, to);
         const textToRefine = selectedText || fullText;
 
         // Configuration based on active provider
@@ -901,10 +858,11 @@ function App() {
                 refinedText = refinedText.replace(/^```[a-zA-Z]*\n/, '').replace(/\n```$/, '');
             }
 
-            const newContent = selectedText
-                ? fullText.substring(0, start) + refinedText + fullText.substring(end)
-                : refinedText;
-            setLocalContent(newContent);
+            if (selectedText) {
+                view.dispatch({ changes: { from, to, insert: refinedText } });
+            } else {
+                view.dispatch({ changes: { from: 0, to: fullText.length, insert: refinedText } });
+            }
         } catch (error) {
             alert('AI Refine failed: ' + error.message);
         } finally {
@@ -918,11 +876,11 @@ function App() {
             return;
         }
 
-        const textarea = editorRef.current;
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const fullText = localContent;
-        const selectedText = fullText.substring(start, end);
+        const view = editorRef.current;
+        if (!view) return;
+        const { from, to } = view.state.selection.main;
+        const fullText = view.state.doc.toString();
+        const selectedText = view.state.sliceDoc(from, to);
         const textToRefine = selectedText || fullText;
 
         const config = {
@@ -947,10 +905,11 @@ function App() {
                 refinedText = refinedText.replace(/^```[a-zA-Z]*\n/, '').replace(/\n```$/, '');
             }
 
-            const newContent = selectedText
-                ? fullText.substring(0, start) + refinedText + fullText.substring(end)
-                : refinedText;
-            setLocalContent(newContent);
+            if (selectedText) {
+                view.dispatch({ changes: { from, to, insert: refinedText } });
+            } else {
+                view.dispatch({ changes: { from: 0, to: fullText.length, insert: refinedText } });
+            }
         } catch (error) {
             alert('Custom Refine failed: ' + error.message);
         } finally {
@@ -985,25 +944,22 @@ function App() {
 
     // --- TOOLS DROP-DOWN HELPERS ---
     const handleFormatting = (prefix, suffix) => {
-        const textarea = editorRef.current;
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const fullText = localContent;
-        const selectedText = fullText.substring(start, end);
-
+        const view = editorRef.current;
+        if (!view) return;
+        
+        const { from, to } = view.state.selection.main;
+        const selectedText = view.state.sliceDoc(from, to);
         const newText = prefix + selectedText + suffix;
-        const updatedContent = fullText.substring(0, start) + newText + fullText.substring(end);
-
-        setLocalContent(updatedContent);
+        
+        view.dispatch({
+            changes: { from, to, insert: newText },
+            // This highlights the text inside the brackets/asterisks automatically!
+            selection: { anchor: from + prefix.length, head: from + prefix.length + selectedText.length }
+        });
+        
         setIsToolsMenuOpen(false);
         setIsColorMenuOpen(false);
-
-        // Reset selection
-        setTimeout(() => {
-            textarea.selectionStart = start;
-            textarea.selectionEnd = start + newText.length;
-            textarea.focus();
-        }, 0);
+        view.focus();
     };
 
     const handleVerticalSpacing = async () => {
@@ -1018,11 +974,11 @@ function App() {
     };
 
     const handleBreakMathBlock = async () => {
-        const textarea = editorRef.current;
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const fullText = localContent;
-        const selectedText = fullText.substring(start, end);
+        const view = editorRef.current;
+        if (!view) return;
+        const { from, to } = view.state.selection.main;
+        const fullText = view.state.doc.toString();
+        const selectedText = view.state.sliceDoc(from, to);
 
         if (!selectedText.trim().startsWith('$$') || !selectedText.trim().endsWith('$$')) {
             alert("Please select an entire math block (including $$ delimiters).");
@@ -1046,8 +1002,11 @@ function App() {
         setIsToolsMenuOpen(false);
         try {
             const result = await processAiRequest(config);
-            const updatedContent = fullText.substring(0, start) + result + fullText.substring(end);
-            setLocalContent(updatedContent);
+            if (selectedText) {
+                view.dispatch({ changes: { from, to, insert: result } });
+            } else {
+                view.dispatch({ changes: { from: 0, to: fullText.length, insert: result } });
+            }
         } catch (error) {
             alert('Failed to break math block: ' + error.message);
         } finally {
@@ -1059,54 +1018,34 @@ function App() {
     const handlePreviewClick = (e) => {
         // Fix Interaction Conflict: Prevent jump if user is selecting text
         if (window.getSelection().toString().length > 0) return;
-
-        // 1. Find the clicked element (paragraph, header, etc.)
+        
+        // 1. Find the clicked element
         const target = e.target.closest('[data-source-line]');
         if (!target) return;
-
-        // 2. Find which PAGE container this element is inside
-        const pageContainer = target.closest('.page-container');
-        if (!pageContainer) return;
-
-        // 3. Get the Local Line (Parser thinks every page starts at 1)
-        const localLine = parseInt(target.getAttribute('data-source-line'), 10);
-
-        // 5. Calculate the TRUE absolute line number (Sync logic simplified)
-        // Since we are rendering the whole doc, data-source-line IS the absolute line.
-        const trueLineNum = localLine;
-
-        if (isNaN(trueLineNum) || !editorRef.current) return;
-
-        const textarea = editorRef.current;
-        const content = textarea.value;
-        // 6. Calculate Character Index for that line (Robust Scanner for Windows \r\n)
-        let startIndex = 0;
-        let currentLine = 1;
-        while (currentLine < trueLineNum && startIndex < content.length) {
-            const nextNewline = content.indexOf('\n', startIndex);
-            if (nextNewline === -1) break;
-            startIndex = nextNewline + 1;
-            currentLine++;
-        }
-
-        // Find end of line
-        const endOfLine = content.indexOf('\n', startIndex);
-        const endIndex = endOfLine === -1 ? content.length : endOfLine;
-
-        // 7. Highlight the text in the editor
-        textarea.focus();
-        textarea.setSelectionRange(startIndex, endIndex);
-
-        // 8. Scroll using the robust Pixel Calculator
-        const pixelTop = getCaretCoordinates(textarea, startIndex);
-        const container = textarea.closest('.colorful-editor-container');
-
-        if (container) {
-            const containerHeight = container.clientHeight;
-            container.scrollTo({
-                top: Math.max(0, pixelTop - (containerHeight / 2)),
-                behavior: 'smooth'
+        
+        // 2. Get the line number generated by the Markdown parser
+        const trueLineNum = parseInt(target.getAttribute('data-source-line'), 10);
+        const view = editorRef.current;
+        
+        if (isNaN(trueLineNum) || !view) return;
+        
+        try {
+            // CodeMirror lines are 1-indexed. Clamp it just in case.
+            const docLines = view.state.doc.lines;
+            const safeLineNum = Math.max(1, Math.min(trueLineNum, docLines));
+            
+            // Get the exact Line object from CodeMirror
+            const line = view.state.doc.line(safeLineNum);
+            
+            // Jump to the exact line, set the cursor, and center it on screen!
+            view.dispatch({
+                selection: { anchor: line.from },
+                effects: [EditorView.scrollIntoView(line.from, { y: 'center' })]
             });
+            
+            view.focus();
+        } catch (error) {
+            console.error("Scroll sync failed", error);
         }
     };
 
@@ -1899,7 +1838,7 @@ function App() {
                             onChange={setLocalContent}
                             onPaste={handlePaste}
                             placeholder="Start typing..."
-                            textareaRef={editorRef}
+                            editorViewRef={editorRef} 
                         />
                     </section>
                 )}

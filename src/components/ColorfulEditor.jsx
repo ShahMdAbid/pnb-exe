@@ -1,129 +1,106 @@
 import React, { useEffect } from 'react';
-import Editor from 'react-simple-code-editor';
-import Prism from 'prismjs';
-import 'prismjs/components/prism-markdown';
-// You can import a prism theme here if you want basic coloring 
-// but we will likely style it in CSS for a perfect match.
-import 'prismjs/themes/prism.css';
+import CodeMirror from '@uiw/react-codemirror';
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import { languages } from '@codemirror/language-data';
+import { EditorView, Decoration, MatchDecorator, ViewPlugin } from '@codemirror/view';
 
-// --- CUSTOM GRAMMAR: Poring Markdown ---
-Prism.languages.poring = Prism.languages.extend('markdown', {});
-
-Prism.languages.insertBefore('poring', 'prolog', {
-    'poring-explanation': {
-        pattern: /\[\[.+?\]\]\((?:[^()]+|\((?:[^()]+|\([^()]*\))*\))*\)/,
-        greedy: true,
-        alias: 'keyword'
+// Custom theme to make it seamlessly match your Light/Dark mode CSS variables
+const poringTheme = EditorView.theme({
+    "&": {
+        backgroundColor: "transparent",
+        height: "100%",
+        color: "var(--text-main)"
     },
-    'poring-color': {
-        pattern: /(?:red|blue|green|orange|purple|gray)\[(?:[^\[\]]|\[[^\[\]]*\])*\]/,
-        greedy: true,
-        inside: {
-            'poring-keyword': {
-                pattern: /^(?:red|blue|green|orange|purple|gray)(?=\[)/,
-                alias: 'keyword'
-            },
-            'punctuation': /[\[\]]/,
-            'poring-color': {
-                pattern: /(?:red|blue|green|orange|purple|gray)\[(?:[^\[\]]|\[[^\[\]]*\])*\]/,
-                alias: 'important' // Highlight differently if nested
-            },
-            'poring-align': {
-                pattern: /(?:center|right)\[(?:[^\[\]]|\[[^\[\]]*\])*\]/,
-                alias: 'important'
-            },
-            'poring-function': {
-                pattern: /\[today\]/,
-                alias: 'important'
-            }
-        }
+    ".cm-scroller": {
+        fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+        fontSize: "14px",
+        lineHeight: "1.6",
+        padding: "20px 0"
     },
-    'poring-align': {
-        pattern: /(?:center|right)\[(?:[^\[\]]|\[[^\[\]]*\])*\]/,
-        greedy: true,
-        inside: {
-            'poring-keyword': {
-                pattern: /^(?:center|right)(?=\[)/,
-                alias: 'keyword'
-            },
-            'punctuation': /[\[\]]/,
-            'poring-color': {
-                pattern: /(?:red|blue|green|orange|purple|gray)\[(?:[^\[\]]|\[[^\[\]]*\])*\]/,
-                alias: 'important'
-            },
-            'poring-align': {
-                pattern: /(?:center|right)\[(?:[^\[\]]|\[[^\[\]]*\])*\]/,
-                alias: 'important'
-            },
-            'poring-function': {
-                pattern: /\[today\]/,
-                alias: 'important'
-            }
-        }
+    "&.cm-focused": {
+        outline: "none" // Removes the ugly default blue outline
     },
-    'poring-function': {
-        pattern: /\[today\]/,
-        alias: 'keyword'
+    ".cm-gutters": {
+        backgroundColor: "transparent",
+        borderRight: "1px solid var(--border-color)",
+        color: "#888",
+        minWidth: "45px",
+        paddingRight: "5px"
     },
-    'poring-math': [
-        {
-            // Block Math: $$ ... $$ (can span multiple lines safely)
-            pattern: /\$\$[\s\S]*?\$\$/,
-            alias: 'important'
-        },
-        {
-            // Inline Math: $ ... $ (strictly bound to a single line to prevent catastrophic backtracking)
-            pattern: /\$[^$\n]+\$/,
-            alias: 'important'
-        }
-    ],
-    'poring-indent': {
-        pattern: /^[\s\.]*\.+/m,
-        alias: 'comment'
+    ".cm-content": {
+        paddingLeft: "10px",
+        paddingRight: "25px"
     },
-    'poring-pagebreak': {
-        pattern: /^---$/m,
-        alias: 'bold'
-    },
-    'poring-image-key': {
-        pattern: /poring_img_\d+/,
-        alias: 'url'
-    }
+    // --- CUSTOM PORING COLORS ---
+    ".cm-poring-keyword": { color: "#b91c1c", fontWeight: "bold" },
+    ".cm-poring-spacer": { color: "#888", fontStyle: "italic" },
+    ".cm-poring-math": { color: "#d32f2f", backgroundColor: "rgba(0,0,0,0.03)", borderRadius: "3px" },
+    ".cm-poring-explanation": { color: "#3b82f6", textDecoration: "underline" }
 });
 
-const ColorfulEditor = ({ value, onChange, onPaste, placeholder, textareaRef }) => {
+// Creates a blazing fast regex highlighter that only runs on visible text
+function createMatchPlugin(regex, className) {
+    const decorator = new MatchDecorator({
+        regexp: regex,
+        decoration: Decoration.mark({ class: className })
+    });
+    return ViewPlugin.fromClass(
+        class {
+            constructor(view) { this.decorations = decorator.createDeco(view); }
+            update(update) { 
+                if (update.docChanged || update.viewportChanged) {
+                    this.decorations = decorator.createDeco(update.view); 
+                }
+            }
+        },
+        { decorations: v => v.decorations }
+    );
+}
 
-    useEffect(() => {
-        if (textareaRef) {
-            const el = document.getElementById('poring-editor-textarea');
-            if (el) {
-                textareaRef.current = el;
+const ColorfulEditor = ({ value, onChange, onPaste, placeholder, editorViewRef }) => {
+
+    // We intercept the DOM paste event and pass it to your App.jsx handlePaste
+    const domEventHandlers = EditorView.domEventHandlers({
+        paste: (event, view) => {
+            if (onPaste) {
+                // We pass the native event so your e.clipboardData.items still works!
+                onPaste(event);
             }
         }
-    }, [textareaRef]);
-
-    const highlightWithLineNumbers = (input) => {
-        return Prism.highlight(input, Prism.languages.poring, 'poring')
-            .split('\n')
-            .map((line, i) => `<span class="editorLineNumber">${i + 1}</span>${line}`)
-            .join('\n');
-    };
+    });
 
     return (
-        <div className="colorful-editor-container">
-            <Editor
+        <div className="colorful-editor-container" style={{ flex: 1, height: '100%', minHeight: 0, display: 'flex' }}>
+            <CodeMirror
                 value={value}
-                onValueChange={onChange}
-                highlight={highlightWithLineNumbers}
-                padding={20}
+                height="100%" // <--- ADDED THIS to make it fill the container
+                style={{ flex: 1, overflow: 'auto' }} // <--- ADDED THIS to enable scrolling
+                onChange={(val) => onChange(val)}
+                theme={poringTheme}
+                extensions={[
+                    markdown({ base: markdownLanguage, codeLanguages: languages }),
+                    domEventHandlers,
+                    EditorView.lineWrapping,
+                    // --- INJECT CUSTOM HIGHLIGHTERS ---
+                    createMatchPlugin(/\b(red|blue|green|orange|purple|gray|center|right|left)(?=\[)/g, "cm-poring-keyword"),
+                    createMatchPlugin(/\[today\]/g, "cm-poring-keyword"),
+                    createMatchPlugin(/^\s*\/\/\d+/gm, "cm-poring-spacer"),
+                    createMatchPlugin(/\$[^$\n]+\$/g, "cm-poring-math"),
+                    createMatchPlugin(/\[\[.*?\]\]\(.*?\)/g, "cm-poring-explanation")
+                ]}
                 placeholder={placeholder}
-                className="colorful-editor"
-                textareaId="poring-editor-textarea"
-                onPaste={onPaste}
-                style={{
-                    fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-                    fontSize: 13.5,
-                    minHeight: '100%',
+                basicSetup={{
+                    lineNumbers: true,
+                    highlightActiveLineGutter: false,
+                    highlightActiveLine: false,
+                    foldGutter: false,
+                    dropCursor: true,
+                    crosshairCursor: false,
+                }}
+                onCreateEditor={(view) => {
+                    if (editorViewRef) {
+                        editorViewRef.current = view;
+                    }
                 }}
             />
         </div>
