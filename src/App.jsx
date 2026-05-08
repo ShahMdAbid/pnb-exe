@@ -18,8 +18,9 @@ import {
     Loader2, Settings, X, ClipboardCheck, PanelLeftClose, PanelLeftOpen,
     Bot, ExternalLink, Upload, Wand2, RotateCcw, Wrench, Palette, Scissors,
     AlignLeft, AlignCenter, AlignRight, Minus, Square, Columns, PenTool, Eye,
-    Search, FilePlus, Bold, Italic, Underline, Strikethrough, Highlighter
+    Search, FilePlus, Bold, Italic, Underline, Strikethrough, Highlighter, Pen
 } from 'lucide-react';
+import DrawMode from './components/DrawMode';
 import 'katex/dist/katex.min.css';
 import './App.css';
 import guideContent from './guide.md?raw';
@@ -32,9 +33,13 @@ import {
 } from './utils/aiService';
 
 // --- HELPER: Database Persistence ---
-const saveImageToDB = async (blob) => {
+const saveImageToDB = async (fileOrBlob) => {
     const key = `poring_img_${Date.now()}`;
-    await localforage.setItem(key, blob);
+    // Convert File to ArrayBuffer then back to pure Blob. 
+    // This strips File-specific metadata that breaks IndexedDB cloning.
+    const buffer = await fileOrBlob.arrayBuffer();
+    const pureBlob = new Blob([buffer], { type: fileOrBlob.type || 'image/png' });
+    await localforage.setItem(key, pureBlob);
     return key;
 };
 
@@ -91,16 +96,13 @@ const PDF_CONFIG = {
 
 const CustomImage = ({ src, alt }) => {
     const [imgSrc, setImgSrc] = useState(src);
-    // Syntax: ![Alt|Width|Caption](url)
     const parts = alt ? alt.split('|') : ["Image"];
     const width = parts[1] || '400';
     const caption = parts[2] || null;
 
     useEffect(() => {
         let objectUrl = null;
-        // Resolve from ASSET_MAP if keyword exists
         const resolvedSrc = ASSET_MAP[src] || src;
-
         if (resolvedSrc && resolvedSrc.startsWith('poring_img_')) {
             localforage.getItem(resolvedSrc).then(blob => {
                 if (blob) {
@@ -111,30 +113,37 @@ const CustomImage = ({ src, alt }) => {
         } else {
             setImgSrc(resolvedSrc);
         }
-
         return () => {
             if (objectUrl) URL.revokeObjectURL(objectUrl);
         };
     }, [src]);
 
+    const handleDoubleClick = () => {
+        if (src.startsWith('poring_img_')) {
+            window.dispatchEvent(new CustomEvent('request-image-edit', { detail: src }));
+        }
+    };
+
     const imageElement = (
         <img
             src={imgSrc}
             alt={parts[0]}
-            style={{ width: caption ? '100%' : `${width}px`, display: 'block', margin: '0 auto' }}
+            // Removed display: block so flexbox can align it side-by-side
+            style={{ width: caption ? '100%' : `${width}px`, cursor: 'pointer', maxWidth: '100%', height: 'auto', borderRadius: '4px' }}
             className="resized-image"
+            onDoubleClick={handleDoubleClick}
+            title="Double click to edit in Draw Mode"
         />
     );
 
     if (caption) {
         return (
-            <figure style={{ display: 'block', margin: '1em auto', textAlign: 'center', width: `${width}px` }}>
+            <figure style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: 0, width: `${width}px`, maxWidth: '100%' }}>
                 {imageElement}
                 <figcaption className="image-caption">{caption}</figcaption>
             </figure>
         );
     }
-
     return imageElement;
 };
 
@@ -256,14 +265,27 @@ const MarkdownComponents = {
     img: CustomImage,
     a: (props) => <a {...props} className="styled-link" target="_blank" rel="noopener noreferrer" />,
     hr: () => null,
-
-    // SAFE ELEMENTS TO TAG (Text & Lists)
     p: (props) => {
         const children = React.Children.toArray(props.children);
-        const hasOnlyImage = children.length === 1 && children[0].props && children[0].type === CustomImage;
 
-        if (hasOnlyImage) {
-            return <div className="image-paragraph sync-target" data-source-line={props.node?.position?.start?.line}>{props.children}</div>;
+        // Find all images and non-images in this paragraph
+        const images = children.filter(child => child.props && child.type === CustomImage);
+        const nonImages = children.filter(child => !(child.props && child.type === CustomImage));
+
+        // Check if the non-image content is just empty space/newlines
+        const hasOnlyImagesAndWhitespace = nonImages.every(child => typeof child === 'string' && child.trim() === '');
+
+        if (images.length > 0 && hasOnlyImagesAndWhitespace) {
+            return (
+                <div
+                    className="image-gallery sync-target"
+                    data-source-line={props.node?.position?.start?.line}
+                    // This Flexbox wrapper allows multiple images to sit side-by-side centered!
+                    style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', flexWrap: 'wrap', margin: '1.5em 0' }}
+                >
+                    {props.children}
+                </div>
+            );
         }
         return <SafeInject tagName="p" {...props} />;
     },
@@ -274,22 +296,15 @@ const MarkdownComponents = {
     blockquote: (props) => <SafeInject tagName="blockquote" {...props} />,
     li: (props) => <SafeInject tagName="li" {...props} />,
     pre: (props) => <SafeInject tagName="pre" {...props} />,
-
-    // Support for custom syntax (colors, alignment, highlights)
     span: (props) => <SafeInject tagName="span" {...props} />,
     div: (props) => <SafeInject tagName="div" {...props} />,
     mark: (props) => <SafeInject tagName="mark" {...props} />,
-
-    // Table elements (Bypass SafeInject to avoid layout breakage)
     table: (props) => <table {...props} />,
     thead: (props) => <thead {...props} />,
     tbody: (props) => <tbody {...props} />,
     tr: (props) => <tr {...props} />,
     th: (props) => <th {...props} />,
     td: (props) => <td {...props} />,
-
-    // CRITICAL: DO NOT define div, span, or math components here.
-    // Letting ReactMarkdown handle them natively prevents breaking KaTeX/MathJax.
 };
 
 // --- BLOCK PARSER ---
@@ -303,7 +318,7 @@ const ABOUT_NOTE = {
 };
 
 const GEMINI_MODELS = [
-    { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite (Fast & Free)' },
+    { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
     { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
     { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
     { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
@@ -320,6 +335,60 @@ function App() {
     const [activeNoteId, setActiveNoteId] = useState(ABOUT_NOTE.id);
     const [viewMode, setViewMode] = useState('split');
     const [searchQuery, setSearchQuery] = useState('');
+    const [drawModeState, setDrawModeState] = useState({ isOpen: false, editKey: null });
+
+    // Listen for Double Click from Preview
+    useEffect(() => {
+        const handleImageEdit = (e) => {
+            setDrawModeState({ isOpen: true, editKey: e.detail });
+        };
+        window.addEventListener('request-image-edit', handleImageEdit);
+        return () => window.removeEventListener('request-image-edit', handleImageEdit);
+    }, []);
+
+    // Function to open Draw Mode based on Editor Cursor
+    const handleOpenDrawMode = () => {
+        const view = editorRef.current;
+        if (!view) return;
+
+        const { from, to } = view.state.selection.main;
+        const line = view.state.doc.lineAt(from);
+
+        // Check if cursor is on a line with an image tag
+        const imageRegex = /!\[.*?\]\((poring_img_\d+)\)/;
+        const match = line.text.match(imageRegex);
+
+        if (match) {
+            // Edit existing image from editor cursor
+            setDrawModeState({ isOpen: true, editKey: match[1] });
+        } else {
+            // Open blank draw mode
+            setDrawModeState({ isOpen: true, editKey: null });
+        }
+        setIsInsertMenuOpen(false); // Close dropdown if it was open
+    };
+
+    // Function that fires when "Save" is clicked inside DrawMode
+    const handleSaveDrawing = (newKey, oldKey) => {
+        const view = editorRef.current;
+
+        if (oldKey) {
+            // We were editing an existing image. Find and replace its key in the document.
+            // We replace it globally in the localContent string so it updates everywhere.
+            setLocalContent(prev => prev.replace(oldKey, newKey));
+        } else if (view) {
+            // We created a brand new drawing. Insert it at cursor position.
+            const markdown = `\n![Image | ${imageWidths.pasted}](${newKey})\n`;
+            const { from, to } = view.state.selection.main;
+            view.dispatch({
+                changes: { from, to, insert: markdown },
+                selection: { anchor: from + markdown.length }
+            });
+            view.focus();
+        }
+
+        setDrawModeState({ isOpen: false, editKey: null });
+    };
 
     // --- PERFORMANCE UPGRADE: LOCAL EDITOR STATE & DEBOUNCE ---
     const [localContent, setLocalContent] = useState('');
@@ -777,6 +846,7 @@ function App() {
         const items = e.clipboardData.items;
         for (let i = 0; i < items.length; i++) {
             if (items[i].type.indexOf('image') !== -1) {
+                e.preventDefault(); // ADD THIS LINE to stop default paste behavior
                 const blob = items[i].getAsFile();
                 try {
                     const key = await saveImageToDB(blob);
@@ -1448,7 +1518,21 @@ function App() {
         }
 
         placeholders.reverse().forEach(p => {
-            c = c.split(p.key + p.padding).join(p.text);
+            let restoredText = p.text;
+
+            // YOUR FIX: Force $$ block $$ to act like a centered block!
+            // This safely bypasses Markdown's list-indentation bugs.
+            if (p.key.startsWith('@@BLOCK_MATH_')) {
+                // Extract the inner equation by removing the $$
+                const innerMath = p.text.replace(/^\$\$|\$\$$/g, '');
+
+                // 1. Wrap in a special center span. (Span is used because Markdown safely parses inside it)
+                // 2. Use a single $ so the parser sees it.
+                // 3. Inject \displaystyle so KaTeX knows to render it large like a block!
+                restoredText = `<span class="math-center-wrapper">$\\displaystyle ${innerMath}$</span>`;
+            }
+
+            c = c.split(p.key + p.padding).join(restoredText);
         });
 
         return c;
@@ -1692,6 +1776,9 @@ function App() {
                                         <button className="format-btn" onClick={() => handleFormatting("==", "==")} title="Highlight"><Highlighter size={14} /></button>
                                         <div className="toolbar-divider"></div>
                                         <button className="format-btn" onClick={() => handleFormatting("center[", "]")} title="Center Align"><AlignCenter size={14} /></button>
+
+                                        <div className="toolbar-divider"></div>
+                                        <button className="format-btn" onClick={handleOpenDrawMode} title="Draw / Annotate"><Pen size={14} /></button>
                                     </div>
 
                                     {/* --- ADVANCED TOOLS DROPDOWN --- */}
@@ -1938,14 +2025,11 @@ function App() {
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-sidebar)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                         <strong style={{ fontSize: '0.9rem' }}>Enable AI Format Fixer</strong>
-                                        <span style={{ fontSize: '0.75rem', opacity: 0.7, maxWidth: '250px' }}>
-                                            Automatically fixes broken math (like missing roots or brackets) when pasting from PDFs. Keeps identical text unchanged.
-                                        </span>
                                     </div>
                                     <button
                                         onClick={toggleAiClipboard}
                                         style={{
-                                            padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', border: 'none',
+                                            padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold',
                                             background: isAiClipboardEnabled ? '#8b5cf6' : 'var(--bg-editor)',
                                             color: isAiClipboardEnabled ? 'white' : 'var(--text-main)',
                                             border: isAiClipboardEnabled ? 'none' : '1px solid var(--border-color)'
@@ -2105,8 +2189,15 @@ function App() {
                     </div>
                 </div>
             )}
-        </div>
 
+            {drawModeState.isOpen && (
+                <DrawMode
+                    initialImageKey={drawModeState.editKey}
+                    onSave={handleSaveDrawing}
+                    onClose={() => setDrawModeState({ isOpen: false, editKey: null })}
+                />
+            )}
+        </div>
     );
 }
 
