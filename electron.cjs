@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain, dialog, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, clipboard, shell } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 
@@ -21,7 +22,7 @@ function createWindow() {
   mainWindow.webContents.on('before-input-event', (event, input) => {
     // Check for Ctrl on Windows/Linux, or Cmd on macOS
     const isZoomModifier = process.platform === 'darwin' ? input.meta : input.control;
-    
+
     if (isZoomModifier && input.type === 'keyDown') {
       if (input.key === '=' || input.key === '+') {
         const currentZoom = mainWindow.webContents.getZoomLevel();
@@ -189,4 +190,44 @@ ipcMain.on('window-maximize', () => {
 ipcMain.on('window-close', () => {
   const win = BrowserWindow.getFocusedWindow();
   if (win) win.close();
+});
+
+// --- AUTO UPDATER & EXTERNAL LINKS ---
+
+ipcMain.on('open-external', (event, url) => {
+  shell.openExternal(url);
+});
+
+ipcMain.on('check-for-updates', (event) => {
+  autoUpdater.checkForUpdates();
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win) win.webContents.send('update-message', 'Checking for updates...');
+});
+
+autoUpdater.on('update-available', () => {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win) win.webContents.send('update-message', 'Update found! Downloading...');
+});
+
+autoUpdater.on('update-available', () => {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win) win.webContents.send('update-message', 'Update found! Downloading...');
+});
+
+autoUpdater.on('update-not-available', () => {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win) win.webContents.send('update-message', 'You have the latest version.');
+});
+
+autoUpdater.on('update-downloaded', () => {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win) win.webContents.send('update-message', 'Update downloaded! Restarting in 3s...');
+  setTimeout(() => {
+    autoUpdater.quitAndInstall();
+  }, 3000);
+});
+
+autoUpdater.on('error', (err) => {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win) win.webContents.send('update-message', 'Error checking for update.');
 });

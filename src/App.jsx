@@ -500,6 +500,21 @@ function App() {
     });
 
     const [aiProvider, setAiProvider] = useState(() => localStorage.getItem('poring_ai_provider') || 'gemini');
+    const [updateStatus, setUpdateStatus] = useState('');
+
+    useEffect(() => {
+        if (typeof window !== 'undefined' && window.electronAPI && window.electronAPI.onUpdateMessage) {
+            window.electronAPI.onUpdateMessage((msg) => setUpdateStatus(msg));
+        }
+    }, []);
+
+    const handleCheckUpdate = () => {
+        if (window.electronAPI && window.electronAPI.checkForUpdates) {
+            window.electronAPI.checkForUpdates();
+        } else {
+            setUpdateStatus('Updates not supported in web mode.');
+        }
+    };
     const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem('poring_gemini_key') || '');
     const [geminiModel, setGeminiModel] = useState(() => localStorage.getItem('poring_gemini_model') || 'gemini-2.5-flash-lite');
 
@@ -2082,11 +2097,31 @@ function App() {
                                     <input type="number" value={typography.size} onChange={(e) => setTypography({ ...typography, size: parseInt(e.target.value) })} style={{ width: '100%', padding: '10px', borderRadius: '6px', background: 'var(--bg-modal-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }} />
                                 </div>
                             </div>
+                            <div className="modal-btns" style={{ paddingTop: '10px', alignItems: 'center' }}>
+                                <button 
+                                    className="btn-get-api"
+                                    style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        const url = aiProvider === 'gemini' 
+                                            ? 'https://aistudio.google.com/app/apikey' 
+                                            : 'https://console.groq.com/keys';
+                                        
+                                        if (window.electronAPI && window.electronAPI.openExternal) {
+                                            window.electronAPI.openExternal(url);
+                                        } else {
+                                            window.open(url, '_blank');
+                                        }
+                                    }}
+                                >
+                                    <ExternalLink size={14} /> Get {aiProvider === 'gemini' ? 'Gemini' : 'Groq'} Key
+                                </button>
 
-                            <div className="modal-btns" style={{ paddingTop: '10px' }}>
-                                <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" className="btn-get-api">
-                                    <ExternalLink size={14} /> Get API Key
-                                </a>
+                                <button className="btn-secondary" onClick={handleCheckUpdate} style={{ marginLeft: '10px' }}>
+                                    Check for Updates
+                                </button>
+                                {updateStatus && <span style={{ fontSize: '0.8rem', color: 'var(--accent)', marginLeft: '8px' }}>{updateStatus}</span>}
+
                                 <div style={{ flex: 1 }} />
                                 <button className="btn-primary" onClick={() => setIsSettingsOpen(false)}>Save & Close</button>
                             </div>

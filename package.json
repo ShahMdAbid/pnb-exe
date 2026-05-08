@@ -1,7 +1,7 @@
 {
     "name": "poring-notebook",
     "private": true,
-    "version": "0.0.0",
+    "version": "1.0.0",
     "type": "module",
     "main": "electron.cjs",
     "scripts": {
@@ -20,6 +20,7 @@
         "@uiw/react-codemirror": "^4.25.9",
         "cors": "^2.8.6",
         "dotenv": "^17.4.2",
+        "electron-updater": "^6.8.3",
         "express": "^5.2.1",
         "file-saver": "^2.0.5",
         "jszip": "^3.10.1",
@@ -64,6 +65,11 @@
             "electron.cjs",
             "preload.cjs"
         ],
+        "publish": [{
+            "provider": "github",
+            "owner": "ShahMdAbid",
+            "repo": "pnb-exe"
+        }],
         "win": {
             "target": "nsis"
         }

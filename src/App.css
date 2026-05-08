@@ -2415,6 +2415,7 @@ html,
 }
 .draw-empty-card {
   background: rgba(255, 255, 255, 0.8);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   padding: 30px;
   border-radius: 16px;

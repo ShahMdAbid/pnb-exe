@@ -19,4 +19,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     windowMinimize: () => ipcRenderer.send('window-minimize'),
     windowMaximize: () => ipcRenderer.send('window-maximize'),
     windowClose: () => ipcRenderer.send('window-close'),
+
+    // --- AUTO UPDATER & EXTERNAL LINKS ---
+    openExternal: (url) => ipcRenderer.send('open-external', url),
+    checkForUpdates: () => ipcRenderer.send('check-for-updates'),
+    onUpdateMessage: (callback) => {
+        ipcRenderer.removeAllListeners('update-message');
+        ipcRenderer.on('update-message', (event, message) => callback(message));
+    },
 });
