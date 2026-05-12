@@ -57,6 +57,7 @@
     "build": {
         "appId": "com.poringnotebook.app",
         "productName": "Poring Notebook",
+        "artifactName": "Poring-Notebook-Setup-${version}.${ext}",
         "directories": {
             "output": "dist-electron"
         },
