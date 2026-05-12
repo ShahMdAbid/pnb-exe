@@ -50,13 +50,30 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
-  createWindow();
+// --- START: SINGLE INSTANCE LOCK ---
+const gotTheLock = app.requestSingleInstanceLock();
 
-  app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+if (!gotTheLock) {
+  // If we couldn't get the lock, it means another instance is already running. Quit immediately.
+  app.quit();
+} else {
+  // If someone tries to open a second instance, focus the existing window instead.
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
   });
-});
+
+  // App is ready, create the window
+  app.whenReady().then(() => {
+    createWindow();
+    app.on('activate', function () {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+}
+// --- END: SINGLE INSTANCE LOCK ---
 
 ipcMain.on('print-to-pdf', async (event, { html, title }) => {
   // If html is null/falsy: print the sender window directly (preserves blob: image URLs).
@@ -193,20 +210,26 @@ ipcMain.on('window-close', () => {
 });
 
 // --- AUTO UPDATER & EXTERNAL LINKS ---
-
 ipcMain.on('open-external', (event, url) => {
   shell.openExternal(url);
 });
 
 ipcMain.on('check-for-updates', (event) => {
-  autoUpdater.checkForUpdates();
   const win = BrowserWindow.getAllWindows()[0];
-  if (win) win.webContents.send('update-message', 'Checking for updates...');
-});
+  const currentVersion = app.getVersion();
 
-autoUpdater.on('update-available', () => {
-  const win = BrowserWindow.getAllWindows()[0];
-  if (win) win.webContents.send('update-message', 'Update found! Downloading...');
+  // autoUpdater hangs in local development, so we bypass it here
+  if (process.env.NODE_ENV === 'development') {
+    if (win) win.webContents.send('update-message', `Dev mode (v${currentVersion})`);
+    return;
+  }
+
+  if (win) win.webContents.send('update-message', `Checking... (v${currentVersion})`);
+  
+  // Catch network/config errors so it doesn't hang forever
+  autoUpdater.checkForUpdates().catch(err => {
+    if (win) win.webContents.send('update-message', `Error checking updates (v${currentVersion})`);
+  });
 });
 
 autoUpdater.on('update-available', () => {
@@ -216,7 +239,7 @@ autoUpdater.on('update-available', () => {
 
 autoUpdater.on('update-not-available', () => {
   const win = BrowserWindow.getAllWindows()[0];
-  if (win) win.webContents.send('update-message', 'You have the latest version.');
+  if (win) win.webContents.send('update-message', `Up to date (v${app.getVersion()})`);
 });
 
 autoUpdater.on('update-downloaded', () => {
@@ -229,5 +252,5 @@ autoUpdater.on('update-downloaded', () => {
 
 autoUpdater.on('error', (err) => {
   const win = BrowserWindow.getAllWindows()[0];
-  if (win) win.webContents.send('update-message', 'Error checking for update.');
+  if (win) win.webContents.send('update-message', 'Error checking for updates.');
 });

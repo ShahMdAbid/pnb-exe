@@ -11,6 +11,7 @@ import localforage from 'localforage';
 import { saveAs } from 'file-saver';
 import { exportPoringFile, importPoringFile } from './utils/poringFileHandler';
 import ColorfulEditor from './components/ColorfulEditor';
+import LivePreviewEditor from './components/LivePreviewEditor';
 import { EditorView } from '@codemirror/view';
 import {
     Plus, FolderPlus, Folder, FileText, ChevronLeft, ChevronRight,
@@ -18,7 +19,8 @@ import {
     Loader2, Settings, X, ClipboardCheck, PanelLeftClose, PanelLeftOpen,
     Bot, ExternalLink, Upload, Wand2, RotateCcw, Wrench, Palette, Scissors,
     AlignLeft, AlignCenter, AlignRight, Minus, Square, Columns, PenTool, Eye,
-    Search, FilePlus, Bold, Italic, Underline, Strikethrough, Highlighter, Pen
+    Search, FilePlus, Bold, Italic, Underline, Strikethrough, Highlighter, Pen,
+    Monitor
 } from 'lucide-react';
 import DrawMode from './components/DrawMode';
 import 'katex/dist/katex.min.css';
@@ -623,19 +625,13 @@ function App() {
         if (typeof window !== 'undefined' && window.electronAPI) {
             window.electronAPI.onClipboardUpdate(async (payload) => {
                 if (!isAutoNoteEnabledRef.current) return;
-
+                
                 let appendText = '';
-
                 if (payload.type === 'text') {
                     const rawText = payload.text;
-
-                    // FLOW: Copied Text -> AI -> Editor
                     if (isAiClipboardEnabledRef.current) {
                         showToast("AI is cleaning clipboard text...");
-
-                        // Access current settings from Ref
                         const { aiProvider: provider, geminiApiKey: gKey, geminiModel: gModel, apiKeys: groqKeys, activeApiKeyIndex: groqIdx } = aiConfigRef.current;
-
                         const config = {
                             provider: provider,
                             apiKey: provider === 'gemini' ? gKey : groqKeys[groqIdx],
@@ -644,26 +640,24 @@ function App() {
                             prompt: rawText,
                             temperature: 0.1
                         };
-
                         try {
                             const cleanedText = await processAiRequest(config);
-                            appendText = `\n\n${cleanedText}\n\n`;
+                            appendText = `\n${cleanedText}\n`;
                             showToast("Clipboard fixed and added!");
                         } catch (err) {
                             console.error("AI Clipboard Fix failed:", err);
                             showToast("AI Fix failed. Adding raw text.");
-                            appendText = `\n\n${rawText}\n\n`; // Fallback to original text
+                            appendText = `\n${rawText}\n`; 
                         }
                     } else {
-                        // FLOW: Copied Text -> Editor (Direct)
-                        appendText = `\n\n${rawText}\n\n`;
+                        appendText = `\n${rawText}\n`;
                     }
                 } else if (payload.type === 'image') {
                     try {
                         const response = await fetch(payload.dataURL);
                         const blob = await response.blob();
                         const key = await saveImageToDB(blob);
-                        appendText = `\n\n![Image | ${imageWidths.autoNote}](${key})\n\n`;
+                        appendText = `\n![Image | ${imageWidths.autoNote}](${key})\n`;
                     } catch (e) {
                         console.error('Clipboard image error', e);
                         return;
@@ -671,11 +665,22 @@ function App() {
                 }
 
                 if (appendText) {
-                    setLocalContent(prev => prev + appendText);
+                    const view = editorRef.current;
+                    // If an editor view is active, insert at cursor. Otherwise, append to end.
+                    if (view) {
+                        const { from } = view.state.selection.main;
+                        view.dispatch({
+                            changes: { from, insert: appendText },
+                            selection: { anchor: from + appendText.length }
+                        });
+                        view.focus();
+                    } else {
+                        setLocalContent(prev => prev + appendText);
+                    }
                 }
             });
         }
-    }, []); // Listener attached once on mount
+    }, [imageWidths.autoNote]); // Listener attached once on mount
 
     const activeNote = notes.find(n => n.id === activeNoteId) || notes[0];
 
@@ -1577,6 +1582,11 @@ function App() {
                         <PenTool size={14} /> Write
                     </button>
                     <button
+                        className={`btn-view ${viewMode === 'live' ? 'active' : ''}`}
+                        onClick={() => setViewMode('live')} title="Live Preview">
+                        <Monitor size={14} /> Live
+                    </button>
+                    <button
                         className={`btn-view ${viewMode === 'split' ? 'active' : ''}`}
                         onClick={() => setViewMode('split')} title="Split View">
                         <Columns size={14} /> Split
@@ -1717,9 +1727,9 @@ function App() {
                     </div>
                 </aside>
 
-                {/* CONDITIONAL EDITOR PANE */}
-                {(viewMode === 'split' || viewMode === 'editor') && (
-                    <section className="editor-pane" style={viewMode === 'editor' ? { borderRight: 'none' } : {}}>
+                {/* Editor Pane (Shows in Split, Editor, OR Live mode) */}
+                {(viewMode === 'split' || viewMode === 'editor' || viewMode === 'live') && (
+                    <section className="editor-pane" style={(viewMode === 'editor' || viewMode === 'live') ? { borderRight: 'none' } : {}}>
                         <div className="editor-info-bar">
                             <span>{activeNote?.name || 'No Note Selected'}</span>
                             {isRefining && <span className="refining-status"><Loader2 className="spin" size={14} /> Refining...</span>}
@@ -1929,13 +1939,25 @@ function App() {
                                 </button>
                             </div>
                         </div>
-                        <ColorfulEditor
-                            value={localContent}
-                            onChange={setLocalContent}
-                            onPaste={handlePaste}
-                            placeholder="Start typing..."
-                            editorViewRef={editorRef}
-                        />
+
+                        {/* THE NEW CONDITIONAL EDITOR RENDERING */}
+                        {viewMode === 'live' ? (
+                            <LivePreviewEditor
+                                value={localContent}
+                                onChange={setLocalContent}
+                                onPaste={handlePaste}
+                                placeholder="Start typing... (Live Mode)"
+                                editorViewRef={editorRef}
+                            />
+                        ) : (
+                            <ColorfulEditor
+                                value={localContent}
+                                onChange={setLocalContent}
+                                onPaste={handlePaste}
+                                placeholder="Start typing..."
+                                editorViewRef={editorRef}
+                            />
+                        )}
                     </section>
                 )}
 
@@ -1972,141 +1994,166 @@ function App() {
                 )}
             </main>
 
-            {
-                isSettingsOpen && (
-                    <div className="modal-overlay">
-                        <div className="modal-content">
-                            <X size={24} className="modal-close-top" onClick={() => setIsSettingsOpen(false)} />
+            {isSettingsOpen && (
+                <div className="modal-overlay" onMouseDown={() => setIsSettingsOpen(false)}>
+                    <div className="modal-content settings-modal-container" onMouseDown={e => e.stopPropagation()}>
+                        
+                        {/* Header */}
+                        <div className="settings-header">
+                            <h3>Preferences</h3>
+                            <X size={20} className="close-btn" style={{ cursor: 'pointer', opacity: 0.6 }} onClick={() => setIsSettingsOpen(false)} />
+                        </div>
 
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingRight: '30px' }}>
-                                <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Preferences</h3>
+                        {/* Body */}
+                        <div className="settings-body">
+                            
+                            {/* Section: AI Provider */}
+                            <div className="settings-group">
+                                <span className="settings-label-main">AI Provider Settings</span>
+                                <div className="settings-card">
+                                    <div className="settings-row">
+                                        <div className="settings-row-info">
+                                            <span className="settings-row-title">Active Provider</span>
+                                        </div>
+                                        <select 
+                                            className="elite-select" 
+                                            value={aiProvider} 
+                                            onChange={(e) => setAiProvider(e.target.value)}
+                                            style={{ width: '180px' }}
+                                        >
+                                            <option value="gemini">Google Gemini</option>
+                                            <option value="groq">Groq (Llama)</option>
+                                        </select>
+                                    </div>
+
+                                    {aiProvider === 'gemini' ? (
+                                        <>
+                                            <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
+                                                <span className="settings-row-title">Gemini API Key</span>
+                                                <input type="password" value={geminiApiKey} onChange={(e) => setGeminiApiKey(e.target.value)} placeholder="AIzaSy..." className="elite-input" />
+                                            </div>
+                                            <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
+                                                <span className="settings-row-title">Select Model</span>
+                                                <select value={geminiModel} onChange={(e) => setGeminiModel(e.target.value)} className="elite-select">
+                                                    {GEMINI_MODELS.map(m => (
+                                                        <option key={m.id} value={m.id}>{m.label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            {apiKeys.map((key, idx) => (
+                                                <div 
+                                                    key={idx} 
+                                                    className={`elite-radio-row ${activeApiKeyIndex === idx ? 'active' : ''}`}
+                                                    onClick={() => setActiveApiKeyIndex(idx)}
+                                                >
+                                                    <div className="custom-radio"><div className="custom-radio-inner" /></div>
+                                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                        <span className="settings-row-title" style={{ fontSize: '0.8rem' }}>Groq API Key {idx + 1}</span>
+                                                        <input 
+                                                            type="password" 
+                                                            value={key} 
+                                                            onChange={(e) => {
+                                                                const newKeys = [...apiKeys];
+                                                                newKeys[idx] = e.target.value;
+                                                                setApiKeys(newKeys);
+                                                            }} 
+                                                            onClick={(e) => e.stopPropagation()} /* Prevent radio click when typing */
+                                                            placeholder={`gsk_key_0${idx + 1}...`} 
+                                                            className="elite-input" 
+                                                        />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
-                            {/* --- AI PROVIDER SETTINGS --- */}
-                            <div className="modal-section">
-                                <div className="setting-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span>AI Provider Settings</span>
-                                    <select
-                                        value={aiProvider}
-                                        onChange={(e) => setAiProvider(e.target.value)}
-                                        style={{ padding: '4px 8px', borderRadius: '4px', background: 'var(--bg-sidebar)', color: 'var(--text-main)', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
-                                    >
-                                        <option value="gemini">Google Gemini</option>
-                                        <option value="groq">Groq (Llama)</option>
-                                    </select>
-                                </div>
-
-                                {aiProvider === 'gemini' ? (
-                                    <div className="api-keys-list">
-                                        <div className="api-key-input-group">
-                                            <label>Gemini API Key</label>
-                                            <input type="password" value={geminiApiKey} onChange={(e) => setGeminiApiKey(e.target.value)} placeholder="AIzaSy..." />
+                            {/* Section: Workflow & AI */}
+                            <div className="settings-group">
+                                <span className="settings-label-main">Workflow & AI</span>
+                                <div className="settings-card">
+                                    <div className="settings-row">
+                                        <div className="settings-row-info">
+                                            <span className="settings-row-title">Enable AI Format Fixer</span>
+                                            <span className="settings-row-desc">Automatically cleans up formatting when you paste text.</span>
                                         </div>
-                                        <div className="api-key-input-group">
-                                            <label>Select Model</label>
-                                            <select
-                                                value={geminiModel}
-                                                onChange={(e) => setGeminiModel(e.target.value)}
-                                                style={{ width: '100%', padding: '10px', borderRadius: '6px', background: 'var(--bg-modal-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}
-                                            >
-                                                {GEMINI_MODELS.map(m => (
-                                                    <option key={m.id} value={m.id}>{m.label}</option>
-                                                ))}
+                                        <div 
+                                            className={`elite-toggle ${isAiClipboardEnabled ? 'active' : ''}`} 
+                                            onClick={toggleAiClipboard}
+                                        >
+                                            <div className="elite-toggle-thumb" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Section: Editor & Media */}
+                            <div className="settings-group">
+                                <span className="settings-label-main">Editor & Media</span>
+                                <div className="settings-card">
+                                    <div className="settings-row" style={{ gap: '16px' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Pasted Image Width (px)</span>
+                                            <input type="number" value={imageWidths.pasted} onChange={(e) => setImageWidths({ ...imageWidths, pasted: parseInt(e.target.value) || 300 })} className="elite-input" />
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Auto-Note Image Width (px)</span>
+                                            <input type="number" value={imageWidths.autoNote} onChange={(e) => setImageWidths({ ...imageWidths, autoNote: parseInt(e.target.value) || 450 })} className="elite-input" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Section: Typography */}
+                            <div className="settings-group">
+                                <span className="settings-label-main">Typography & Spacing</span>
+                                <div className="settings-card">
+                                    <div className="settings-row" style={{ gap: '16px', borderBottom: 'none', paddingBottom: '0' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Font Family</span>
+                                            <select value={typography.font} onChange={(e) => setTypography({ ...typography, font: e.target.value })} className="elite-select">
+                                                <option value="Sans">Modern (Sans)</option>
+                                                <option value="Serif">LaTeX (Standard)</option>
+                                                <option value="Mono">Code (Mono)</option>
+                                            </select>
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Line Spacing</span>
+                                            <select value={spacing} onChange={(e) => setSpacing(e.target.value)} className="elite-select">
+                                                <option value="Too narrow">Too narrow</option>
+                                                <option value="narrow">Narrow</option>
+                                                <option value="normal">Normal</option>
+                                                <option value="wide">Wide</option>
                                             </select>
                                         </div>
                                     </div>
-                                ) : (
-                                    <div className="api-keys-list">
-                                        {apiKeys.map((key, idx) => (
-                                            <div key={idx} style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                                <input type="radio" name="selectedApiKey" checked={activeApiKeyIndex === idx} onChange={() => setActiveApiKeyIndex(idx)} style={{ cursor: 'pointer' }} />
-                                                <div className="api-key-input-group" style={{ flex: 1 }}>
-                                                    <label>Groq API Key {idx + 1}</label>
-                                                    <input type="password" value={key} onChange={(e) => {
-                                                        const newKeys = [...apiKeys];
-                                                        newKeys[idx] = e.target.value;
-                                                        setApiKeys(newKeys);
-                                                    }} placeholder={`gsk_key_0${idx + 1}...`} />
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* --- AI CLIPBOARD SETTING --- */}
-                            <div className="modal-section">
-                                <div className="setting-section-title">Clipboard AI Processing</div>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-sidebar)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                        <strong style={{ fontSize: '0.9rem' }}>Enable AI Format Fixer</strong>
-                                    </div>
-                                    <button
-                                        onClick={toggleAiClipboard}
-                                        style={{
-                                            padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold',
-                                            background: isAiClipboardEnabled ? '#8b5cf6' : 'var(--bg-editor)',
-                                            color: isAiClipboardEnabled ? 'white' : 'var(--text-main)',
-                                            border: isAiClipboardEnabled ? 'none' : '1px solid var(--border-color)'
-                                        }}
-                                    >
-                                        {isAiClipboardEnabled ? 'ON' : 'OFF'}
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* --- EDITOR & IMAGE SETTINGS --- */}
-                            <div className="modal-section">
-                                <div className="setting-section-title">Editor & Image Settings</div>
-                                <div className="settings-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                                    <div className="setting-item">
-                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Pasted Image Width (px)</label>
-                                        <input type="number" value={imageWidths.pasted} onChange={(e) => setImageWidths({ ...imageWidths, pasted: parseInt(e.target.value) || 300 })} style={{ width: '100%', padding: '10px', borderRadius: '6px', background: 'var(--bg-modal-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }} />
-                                    </div>
-                                    <div className="setting-item">
-                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Auto-Note Image Width (px)</label>
-                                        <input type="number" value={imageWidths.autoNote} onChange={(e) => setImageWidths({ ...imageWidths, autoNote: parseInt(e.target.value) || 450 })} style={{ width: '100%', padding: '10px', borderRadius: '6px', background: 'var(--bg-modal-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }} />
+                                    <div className="settings-row">
+                                        <div style={{ flex: 1 }}>
+                                            <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Font Size (px)</span>
+                                            <input type="number" value={typography.size} onChange={(e) => setTypography({ ...typography, size: parseInt(e.target.value) })} className="elite-input" style={{ width: '50%' }} />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* --- TYPOGRAPHY & SPACING --- */}
-                            <div className="modal-section">
-                                <div className="setting-section-title">Typography & Spacing</div>
-                                <div className="settings-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                                    <div className="setting-item">
-                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Font Family</label>
-                                        <select value={typography.font} onChange={(e) => setTypography({ ...typography, font: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', background: 'var(--bg-modal-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}>
-                                            <option value="Sans">Modern (Sans)</option>
-                                            <option value="Serif">LaTeX (Standard)</option>
-                                            <option value="Mono">Code (Mono)</option>
-                                        </select>
-                                    </div>
-                                    <div className="setting-item">
-                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Line Spacing</label>
-                                        <select value={spacing} onChange={(e) => setSpacing(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '6px', background: 'var(--bg-modal-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}>
-                                            <option value="Too narrow">Too narrow</option>
-                                            <option value="narrow">Narrow</option>
-                                            <option value="normal">Normal</option>
-                                            <option value="wide">Wide</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div className="setting-item" style={{ marginTop: '15px' }}>
-                                    <label style={{ fontSize: '0.75rem', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Font Size (px)</label>
-                                    <input type="number" value={typography.size} onChange={(e) => setTypography({ ...typography, size: parseInt(e.target.value) })} style={{ width: '100%', padding: '10px', borderRadius: '6px', background: 'var(--bg-modal-input)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }} />
-                                </div>
-                            </div>
-                            <div className="modal-btns" style={{ paddingTop: '10px', alignItems: 'center' }}>
-                                <button 
+                        </div>
+
+                        {/* Footer */}
+                        <div className="settings-footer">
+                            <div className="settings-footer-left">
+                                <a 
+                                    href="#"
                                     className="btn-get-api"
-                                    style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+                                    style={{ padding: 0, background: 'transparent' }}
                                     onClick={(e) => {
-                                        e.preventDefault();
+                                        e.preventDefault(); 
                                         const url = aiProvider === 'gemini' 
                                             ? 'https://aistudio.google.com/app/apikey' 
                                             : 'https://console.groq.com/keys';
-                                        
                                         if (window.electronAPI && window.electronAPI.openExternal) {
                                             window.electronAPI.openExternal(url);
                                         } else {
@@ -2115,20 +2162,38 @@ function App() {
                                     }}
                                 >
                                     <ExternalLink size={14} /> Get {aiProvider === 'gemini' ? 'Gemini' : 'Groq'} Key
-                                </button>
-
-                                <button className="btn-secondary" onClick={handleCheckUpdate} style={{ marginLeft: '10px' }}>
+                                </a>
+                                
+                                {/* Visual divider */}
+                                <div style={{ width: '1px', height: '16px', background: 'var(--border-color)', margin: '0 8px' }} />
+                                
+                                <button 
+                                    className="btn-secondary" 
+                                    onClick={handleCheckUpdate} 
+                                    style={{ padding: '6px 12px', border: '1px solid var(--border-color)', borderRadius: '6px', background: 'var(--bg-editor)' }}
+                                >
                                     Check for Updates
                                 </button>
-                                {updateStatus && <span style={{ fontSize: '0.8rem', color: 'var(--accent)', marginLeft: '8px' }}>{updateStatus}</span>}
-
-                                <div style={{ flex: 1 }} />
-                                <button className="btn-primary" onClick={() => setIsSettingsOpen(false)}>Save & Close</button>
+                                {updateStatus && (
+                                    <span style={{ fontSize: '0.8rem', color: '#888', fontWeight: '500' }}>
+                                        {updateStatus}
+                                    </span>
+                                )}
                             </div>
+                            
+                            {/* Save Button explicitly gets padding added back to it */}
+                            <button 
+                                className="btn-primary" 
+                                style={{ padding: '8px 20px', borderRadius: '8px', fontSize: '0.9rem' }} 
+                                onClick={() => setIsSettingsOpen(false)}
+                            >
+                                Save & Close
+                            </button>
                         </div>
+
                     </div>
-                )
-            }
+                </div>
+            )}
 
             {
                 deleteConfirm && (

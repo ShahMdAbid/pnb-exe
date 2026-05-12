@@ -2446,3 +2446,205 @@ html,
 .cm-content {
   caret-color: var(--text-main) !important;
 }
+
+/* --- ELITE SETTINGS MODAL --- */
+.settings-modal-container {
+  width: 640px !important;
+  max-height: 85vh;
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-editor);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.settings-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-editor);
+  z-index: 10;
+}
+
+.settings-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.settings-body {
+  padding: 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  background: var(--bg-preview); /* Slightly contrasting background */
+}
+
+.dark-theme .settings-body {
+  background: #101010;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-label-main {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-left: 4px;
+}
+
+/* Card-based Grouping */
+.settings-card {
+  background: var(--bg-editor);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.settings-row-title {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-main);
+}
+
+.settings-row-desc {
+  font-size: 0.75rem;
+  color: #888;
+}
+
+/* Inputs & Selects */
+.elite-input, .elite-select {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-preview);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  font-family: var(--p-font);
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.elite-input:focus, .elite-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+/* Modern Toggle Switch */
+.elite-toggle {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background-color: var(--border-color);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.elite-toggle.active {
+  background-color: var(--accent);
+}
+
+.elite-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background-color: white;
+  border-radius: 50%;
+  transition: transform 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.elite-toggle.active .elite-toggle-thumb {
+  transform: translateX(20px);
+}
+
+/* Footer */
+.settings-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-editor);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.settings-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Radio buttons made elegant */
+.elite-radio-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-editor);
+  transition: background 0.2s;
+  cursor: pointer;
+}
+.elite-radio-row:last-child { border-bottom: none; }
+.elite-radio-row.active { background: rgba(59, 130, 246, 0.05); }
+
+.custom-radio {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.elite-radio-row.active .custom-radio {
+  border-color: var(--accent);
+}
+.custom-radio-inner {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+  transition: 0.2s;
+}
+.elite-radio-row.active .custom-radio-inner {
+  opacity: 1;
+}
