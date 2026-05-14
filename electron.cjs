@@ -1,7 +1,23 @@
-const { app, BrowserWindow, ipcMain, dialog, clipboard, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, clipboard, shell, protocol, net } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
+const { pathToFileURL } = require('url');
+
+// --- MUST BE OUTSIDE app.whenReady() ---
+protocol.registerSchemesAsPrivileged([
+  { 
+    scheme: 'poring-asset', 
+    privileges: { 
+      standard: true, 
+      secure: true, 
+      supportFetchAPI: true, 
+      corsEnabled: true, 
+      stream: true,
+      bypassCSP: true 
+    } 
+  }
+]);
 
 let mainWindow;
 
@@ -67,6 +83,53 @@ if (!gotTheLock) {
 
   // App is ready, create the window
   app.whenReady().then(() => {
+    // --- NATIVE ASSET INFRASTRUCTURE ---
+    const userDataPath = app.getPath('userData'); // e.g., AppData/Roaming/poring-notebook
+    const assetsDir = path.join(userDataPath, 'assets');
+    
+    // Create assets folder if it doesn't exist
+    if (!fs.existsSync(assetsDir)) {
+      fs.mkdirSync(assetsDir, { recursive: true });
+    }
+
+    // Intercept our custom protocol and serve local files natively!
+    protocol.handle('poring-asset', async (request) => {
+      try {
+        // 1. Strip the protocol
+        let assetName = request.url.replace(/^poring-asset:\/\//i, '');
+        // 2. CRITICAL FIX: Strip trailing slash if Chrome added it
+        assetName = assetName.replace(/\/$/, '');
+        
+        const filePath = path.join(assetsDir, assetName);
+        
+        // 3. Directly read the file (safest method for local assets)
+        const fileData = fs.readFileSync(filePath);
+        
+        // 4. Return a raw Response to the browser with explicit headers
+        return new Response(fileData, {
+            status: 200,
+            headers: { 
+                'Content-Type': assetName.endsWith('.png') ? 'image/png' : 'image/jpeg',
+                'Access-Control-Allow-Origin': '*' // Bypass any strict React CORS
+            }
+        });
+      } catch (err) {
+        console.error("Failed to load asset:", err);
+        return new Response('Not Found', { status: 404 });
+      }
+    });
+
+    // Handle Saving from the Frontend
+    ipcMain.handle('save-asset', async (event, { filename, buffer }) => {
+      const filePath = path.join(assetsDir, filename);
+      
+      // FIX: Node's 'fs' module REQUIRES a Buffer, it rejects raw ArrayBuffers!
+      fs.writeFileSync(filePath, Buffer.from(buffer));
+      
+      return `poring-asset://${filename}`;
+    });
+    // --- END NATIVE INFRASTRUCTURE ---
+
     createWindow();
     app.on('activate', function () {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

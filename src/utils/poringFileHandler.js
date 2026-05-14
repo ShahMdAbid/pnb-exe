@@ -5,39 +5,51 @@ import { saveAs } from 'file-saver';
 export const exportPoringFile = async (noteTitle, markdownContent) => {
     try {
         const zip = new JSZip();
-        
+
         // 1. Add metadata and markdown text
-        zip.file("metadata.json", JSON.stringify({ 
-            version: "2.0", 
-            title: noteTitle, 
-            timestamp: Date.now() 
+        zip.file("metadata.json", JSON.stringify({
+            version: "2.0",
+            title: noteTitle,
+            timestamp: Date.now()
         }));
         zip.file("document.md", markdownContent);
 
-        // 2. Create an assets folder in the zip
         const assetsFolder = zip.folder("assets");
-        
-        // 3. Find all images in markdown and add them to the zip as raw Blobs (super fast!)
-        const imageRegex = /!\[.*?\]\((poring_img_.*?)\)/g;
+
+        // 2. Regex matches BOTH native (poring-asset://...) and legacy (poring_img_...) URLs
+        const imageRegex = /!\[.*?\]\((poring-asset:\/\/[^\s)]+|poring_img_[^\s)]+)\)/g;
         let match;
         const keysToFetch = new Set();
-        
+
         while ((match = imageRegex.exec(markdownContent)) !== null) {
             keysToFetch.add(match[1]);
         }
 
+        // 3. Process each image found in the document
         for (const key of keysToFetch) {
-            const blob = await localforage.getItem(key);
-            if (blob) {
-                // Determine extension from blob type (e.g., image/png -> .png)
-                const ext = blob.type.split('/')[1] || 'png';
-                assetsFolder.file(`${key}.${ext}`, blob);
+            if (key.startsWith('poring-asset://')) {
+                // --- NATIVE EXPORT ---
+                const filename = key.replace('poring-asset://', '');
+                try {
+                    // Because we enabled fetch support in electron.cjs, we can just fetch it!
+                    const response = await fetch(key);
+                    const blob = await response.blob();
+                    assetsFolder.file(filename, blob);
+                } catch (err) {
+                    console.error("Failed to fetch native asset for export:", key, err);
+                }
+            } else {
+                // --- LEGACY EXPORT (IndexedDB) ---
+                const blob = await localforage.getItem(key);
+                if (blob) {
+                    const ext = blob.type.split('/')[1] || 'png';
+                    assetsFolder.file(`${key}.${ext}`, blob);
+                }
             }
         }
 
         // 4. Generate the ZIP file and trigger download
         const content = await zip.generateAsync({ type: "blob" });
-        // Change from .poring to .zip
         saveAs(content, `${noteTitle}.zip`);
         return true;
 
@@ -52,21 +64,43 @@ export const importPoringFile = async (file) => {
     try {
         const zip = new JSZip();
         const loadedZip = await zip.loadAsync(file);
-        
+
         // 1. Read Metadata and Markdown
         const metadataString = await loadedZip.file("metadata.json").async("string");
         const metadata = JSON.parse(metadataString);
-        const markdown = await loadedZip.file("document.md").async("string");
+        let markdown = await loadedZip.file("document.md").async("string");
 
-        // 2. Extract images back into localforage
+        // 2. Extract images
         const assetsFolder = loadedZip.folder("assets");
         if (assetsFolder) {
             const files = Object.keys(assetsFolder.files);
-            for (const filename of files) {
-                if (!assetsFolder.files[filename].dir) {
-                    const blob = await assetsFolder.files[filename].async("blob");
-                    // Extract the original 'poring_img_12345' key without the extension
-                    const originalKey = filename.split('/').pop().split('.')[0]; 
+
+            for (const pathKey of files) {
+                if (assetsFolder.files[pathKey].dir) continue;
+
+                // filename could be "img_123.png" or "poring_img_123.png"
+                const filename = pathKey.split('/').pop();
+                const blob = await assetsFolder.files[pathKey].async("blob");
+
+                if (window.electronAPI && window.electronAPI.saveAsset) {
+                    // --- NATIVE IMPORT ---
+                    const arrayBuffer = await blob.arrayBuffer();
+                    let finalFilename = filename;
+
+                    // AUTO-MODERNIZER: If importing a legacy note, upgrade it to Native automatically
+                    if (filename.startsWith('poring_img_')) {
+                        finalFilename = filename.replace('poring_img_', 'img_legacy_');
+                        const oldMarkdownKey = filename.split('.')[0]; // e.g. "poring_img_123"
+
+                        // Replace the old reference in the markdown string with the new native protocol
+                        markdown = markdown.replaceAll(`(${oldMarkdownKey})`, `(poring-asset://${finalFilename})`);
+                    }
+
+                    // Save straight to the OS disk via IPC
+                    await window.electronAPI.saveAsset(finalFilename, arrayBuffer);
+                } else {
+                    // --- LEGACY WEB IMPORT ---
+                    const originalKey = filename.split('.')[0];
                     await localforage.setItem(originalKey, blob);
                 }
             }

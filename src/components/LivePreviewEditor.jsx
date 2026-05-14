@@ -12,7 +12,7 @@ import SustLogo from '../assets/sust_logo.png';
 import BegulaImg from '../assets/Begula.png';
 const ASSET_MAP = { SUST_LOGO: SustLogo, BEGULA_IMG: BegulaImg };
 
-const hideDeco = Decoration.replace({});
+const hideDeco = Decoration.mark({ class: "cm-hidden-markup" });
 
 // --- IMAGE WIDGET ---
 class ImageWidget extends WidgetType {
@@ -22,9 +22,10 @@ class ImageWidget extends WidgetType {
     toDOM() {
         const parts = this.altText ? this.altText.split('|') : ["Image"];
         const width = parts[1] || '300';
-        const wrapper = document.createElement("div");
-        wrapper.style.display = "flex";
-        wrapper.style.justifyContent = "center";
+        const wrapper = document.createElement("span");
+        wrapper.style.display = "inline-block";
+        wrapper.style.width = "100%";
+        wrapper.style.textAlign = "center";
         wrapper.style.padding = "10px 0";
 
         const img = document.createElement("img");
@@ -32,7 +33,11 @@ class ImageWidget extends WidgetType {
         img.style.width = `${width}px`;
         img.style.borderRadius = "4px";
 
-        if (this.source.startsWith('poring_img_')) {
+        if (this.source.startsWith('poring-asset://')) {
+            // Native render
+            img.src = this.source;
+        } else if (this.source.startsWith('poring_img_')) {
+            // Legacy render
             localforage.getItem(this.source).then(blob => {
                 if (blob) img.src = URL.createObjectURL(blob);
             });
@@ -47,11 +52,13 @@ class ImageWidget extends WidgetType {
 class VSpaceWidget extends WidgetType {
     constructor(lines) { super(); this.lines = lines; }
     toDOM() {
-        const div = document.createElement("div");
-        div.style.height = `${this.lines * 24}px`;
-        div.style.backgroundColor = "rgba(139, 92, 246, 0.03)";
-        div.style.borderLeft = "2px dashed rgba(139, 92, 246, 0.2)";
-        return div;
+        const span = document.createElement("span");
+        span.style.display = "inline-block";
+        span.style.width = "100%";
+        span.style.height = `${this.lines * 24}px`;
+        span.style.backgroundColor = "rgba(139, 92, 246, 0.03)";
+        span.style.borderLeft = "2px dashed rgba(139, 92, 246, 0.2)";
+        return span;
     }
 }
 
@@ -71,10 +78,13 @@ class MathWidget extends WidgetType {
     }
 
     toDOM() {
-        const container = document.createElement(this.isBlock ? "div" : "span");
+        const container = document.createElement("span");
 
         if (this.isBlock) {
             container.className = "math-center-wrapper";
+            container.style.display = "inline-block";
+            container.style.width = "100%";
+            container.style.textAlign = "center";
             container.style.cursor = "text";
             container.style.padding = "10px 0";
             container.title = "Click to edit formula";
@@ -303,9 +313,10 @@ const liveTheme = EditorView.theme({
     "&": { backgroundColor: "transparent", height: "100%", color: "var(--text-main)" },
     ".cm-scroller": { fontFamily: "var(--p-font)", fontSize: "var(--p-size)", lineHeight: "1.6", padding: "40px 0" },
     ".cm-content": { paddingLeft: "20px", paddingRight: "20px", maxWidth: "850px", margin: "0 auto" },
-    ".cm-heading1": { fontSize: "2.2rem", fontWeight: "800", display: "block", borderBottom: "1px solid var(--border-color)", marginBottom: "0.5em" },
-    ".cm-heading2": { fontSize: "1.8rem", fontWeight: "700", display: "block" },
-    ".cm-heading3": { fontSize: "1.4rem", fontWeight: "600", display: "block" },
+    ".cm-hidden-markup": { display: "none" },
+    ".cm-heading1": { fontSize: "2.2rem", fontWeight: "800", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.2em", paddingTop: "0.5em" },
+    ".cm-heading2": { fontSize: "1.8rem", fontWeight: "700", paddingTop: "0.5em" },
+    ".cm-heading3": { fontSize: "1.4rem", fontWeight: "600", paddingTop: "0.5em" },
     ".cm-line-center": { textAlign: "center" },
     ".cm-line-right": { textAlign: "right" },
     ".cm-poring-red": { color: "#ef4444" },
@@ -326,13 +337,24 @@ const liveTheme = EditorView.theme({
 const liveMdExtension = markdown({ base: markdownLanguage, codeLanguages: languages });
 const liveBasicSetup = { lineNumbers: false, foldGutter: false };
 
-const LivePreviewEditor = ({ value, onChange, placeholder, editorViewRef }) => {
+const LivePreviewEditor = ({ value, onChange, onPaste, placeholder, editorViewRef }) => {
+    const onPasteRef = React.useRef(onPaste);
+    React.useEffect(() => {
+        onPasteRef.current = onPaste;
+    }, [onPaste]);
 
     // 🚀 Memoize the extensions array
     const extensions = useMemo(() => [
         liveMdExtension,
         EditorView.lineWrapping,
-        livePreviewPlugin
+        livePreviewPlugin,
+        EditorView.domEventHandlers({
+            paste: (event, view) => {
+                if (onPasteRef.current) {
+                    onPasteRef.current(event);
+                }
+            }
+        })
     ], []);
 
     return (

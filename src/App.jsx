@@ -35,10 +35,21 @@ import {
 } from './utils/aiService';
 
 // --- HELPER: Database Persistence ---
-const saveImageToDB = async (fileOrBlob) => {
+// --- NATIVE ASSET MANAGER ---
+const saveImageToAssetStore = async (fileOrBlob) => {
+    const ext = fileOrBlob.type.includes('png') ? 'png' : 'jpg';
+    const filename = `img_${Date.now()}.${ext}`;
+
+    // 1. NATIVE ELECTRON PATH (Ultra Fast)
+    if (window.electronAPI && window.electronAPI.saveAsset) {
+        // Just send the raw ArrayBuffer. Electron handles the conversion.
+        const arrayBuffer = await fileOrBlob.arrayBuffer();
+        await window.electronAPI.saveAsset(filename, arrayBuffer);
+        return `poring-asset://${filename}`;
+    }
+
+    // 2. LEGACY WEB FALLBACK
     const key = `poring_img_${Date.now()}`;
-    // Convert File to ArrayBuffer then back to pure Blob. 
-    // This strips File-specific metadata that breaks IndexedDB cloning.
     const buffer = await fileOrBlob.arrayBuffer();
     const pureBlob = new Blob([buffer], { type: fileOrBlob.type || 'image/png' });
     await localforage.setItem(key, pureBlob);
@@ -105,23 +116,29 @@ const CustomImage = ({ src, alt }) => {
     useEffect(() => {
         let objectUrl = null;
         const resolvedSrc = ASSET_MAP[src] || src;
-        if (resolvedSrc && resolvedSrc.startsWith('poring_img_')) {
+
+        if (resolvedSrc && resolvedSrc.startsWith('poring-asset://')) {
+            // NATIVE PATH: Let the browser engine handle it directly! No memory leaks.
+            setImgSrc(resolvedSrc);
+        } else if (resolvedSrc && resolvedSrc.startsWith('poring_img_')) {
+            // LEGACY PATH: Fallback for older notes
             localforage.getItem(resolvedSrc).then(blob => {
                 if (blob) {
                     objectUrl = URL.createObjectURL(blob);
                     setImgSrc(objectUrl);
                 }
-            }).catch(err => console.error("Error loading image from DB:", err));
+            }).catch(err => console.error("Error loading legacy image:", err));
         } else {
             setImgSrc(resolvedSrc);
         }
+        
         return () => {
             if (objectUrl) URL.revokeObjectURL(objectUrl);
         };
     }, [src]);
 
     const handleDoubleClick = () => {
-        if (src.startsWith('poring_img_')) {
+        if (src.startsWith('poring_img_') || src.startsWith('poring-asset://')) {
             window.dispatchEvent(new CustomEvent('request-image-edit', { detail: src }));
         }
     };
@@ -357,7 +374,7 @@ function App() {
         const line = view.state.doc.lineAt(from);
 
         // Check if cursor is on a line with an image tag
-        const imageRegex = /!\[.*?\]\((poring_img_\d+)\)/;
+        const imageRegex = /!\[.*?\]\(((?:poring-asset:\/\/img_|poring_img_).*?)\)/;
         const match = line.text.match(imageRegex);
 
         if (match) {
@@ -494,22 +511,19 @@ function App() {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [apiKeys, setApiKeys] = useState(() => {
         const saved = localStorage.getItem('groq_api_keys');
-        return saved ? JSON.parse(saved) : ['', '', ''];
+        return saved ? JSON.parse(saved) : [''];
     });
     const [activeApiKeyIndex, setActiveApiKeyIndex] = useState(() => {
         const saved = localStorage.getItem('poring_active_api_key_index');
         return saved ? parseInt(saved, 10) : 0;
     });
-
     const [aiProvider, setAiProvider] = useState(() => localStorage.getItem('poring_ai_provider') || 'gemini');
     const [updateStatus, setUpdateStatus] = useState('');
-
     useEffect(() => {
         if (typeof window !== 'undefined' && window.electronAPI && window.electronAPI.onUpdateMessage) {
             window.electronAPI.onUpdateMessage((msg) => setUpdateStatus(msg));
         }
     }, []);
-
     const handleCheckUpdate = () => {
         if (window.electronAPI && window.electronAPI.checkForUpdates) {
             window.electronAPI.checkForUpdates();
@@ -517,7 +531,17 @@ function App() {
             setUpdateStatus('Updates not supported in web mode.');
         }
     };
-    const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem('poring_gemini_key') || '');
+    // New Multi-key Gemini State (with fallback migration for old users)
+    const [geminiKeys, setGeminiKeys] = useState(() => {
+        const saved = localStorage.getItem('poring_gemini_keys');
+        if (saved) return JSON.parse(saved);
+        const legacy = localStorage.getItem('poring_gemini_key');
+        return legacy ? [legacy] : [''];
+    });
+    const [activeGeminiIndex, setActiveGeminiIndex] = useState(() => {
+        const saved = localStorage.getItem('poring_active_gemini_index');
+        return saved ? parseInt(saved, 10) : 0;
+    });
     const [geminiModel, setGeminiModel] = useState(() => localStorage.getItem('poring_gemini_model') || 'gemini-2.5-flash-lite');
 
     // AI Clipboard Filter State
@@ -588,22 +612,15 @@ function App() {
     const editorRef = useRef(null);
     const previewRef = useRef(null);
 
-    const aiConfigRef = useRef({ aiProvider, geminiApiKey, geminiModel, apiKeys, activeApiKeyIndex });
-
-    // Keep the ref updated whenever settings change
+    const aiConfigRef = useRef({ aiProvider, geminiKeys, activeGeminiIndex, geminiModel, apiKeys, activeApiKeyIndex });
     useEffect(() => {
-        aiConfigRef.current = { aiProvider, geminiApiKey, geminiModel, apiKeys, activeApiKeyIndex };
-    }, [aiProvider, geminiApiKey, geminiModel, apiKeys, activeApiKeyIndex]);
-
-    // Persistence
+        aiConfigRef.current = { aiProvider, geminiKeys, activeGeminiIndex, geminiModel, apiKeys, activeApiKeyIndex };
+    }, [aiProvider, geminiKeys, activeGeminiIndex, geminiModel, apiKeys, activeApiKeyIndex]);
     useEffect(() => {
-        // DO NOT save if the app is still booting, or you will overwrite data with empty arrays!
         if (!isBooting) {
             localforage.setItem('poring_notes', notes);
             localforage.setItem('poring_folders', folders);
             localforage.setItem('poring_active_note', activeNoteId || '');
-
-            // Settings are fine to stay in localStorage as they are very small
             localStorage.setItem('poring_typography', JSON.stringify(typography));
             localStorage.setItem('poring_spacing', spacing);
             localStorage.setItem('poring_theme', theme);
@@ -612,13 +629,12 @@ function App() {
             localStorage.setItem('poring_custom_templates', JSON.stringify(customTemplates));
             localStorage.setItem('poring_saved_custom_instructions', JSON.stringify(savedCustomInstructions));
             localStorage.setItem('poring_image_widths', JSON.stringify(imageWidths));
-
-            // NEW SAVES:
             localStorage.setItem('poring_ai_provider', aiProvider);
-            localStorage.setItem('poring_gemini_key', geminiApiKey);
+            localStorage.setItem('poring_gemini_keys', JSON.stringify(geminiKeys));
+            localStorage.setItem('poring_active_gemini_index', activeGeminiIndex);
             localStorage.setItem('poring_gemini_model', geminiModel);
         }
-    }, [notes, folders, activeNoteId, typography, spacing, theme, apiKeys, activeApiKeyIndex, customTemplates, savedCustomInstructions, imageWidths, aiProvider, geminiApiKey, geminiModel, isBooting]);
+    }, [notes, folders, activeNoteId, typography, spacing, theme, apiKeys, activeApiKeyIndex, customTemplates, savedCustomInstructions, imageWidths, aiProvider, geminiKeys, activeGeminiIndex, geminiModel, isBooting]);
 
     // Clipboard Listener Receiver
     useEffect(() => {
@@ -631,10 +647,10 @@ function App() {
                     const rawText = payload.text;
                     if (isAiClipboardEnabledRef.current) {
                         showToast("AI is cleaning clipboard text...");
-                        const { aiProvider: provider, geminiApiKey: gKey, geminiModel: gModel, apiKeys: groqKeys, activeApiKeyIndex: groqIdx } = aiConfigRef.current;
+                        const { aiProvider: provider, geminiKeys: gKeys, activeGeminiIndex: gIdx, geminiModel: gModel, apiKeys: groqKeys, activeApiKeyIndex: groqIdx } = aiConfigRef.current;
                         const config = {
                             provider: provider,
-                            apiKey: provider === 'gemini' ? gKey : groqKeys[groqIdx],
+                            apiKey: provider === 'gemini' ? gKeys[gIdx] : groqKeys[groqIdx],
                             model: provider === 'gemini' ? gModel : 'llama-3.3-70b-versatile',
                             systemInstruction: CLIPBOARD_FIXER_PROMPT,
                             prompt: rawText,
@@ -656,7 +672,7 @@ function App() {
                     try {
                         const response = await fetch(payload.dataURL);
                         const blob = await response.blob();
-                        const key = await saveImageToDB(blob);
+                        const key = await saveImageToAssetStore(blob);
                         appendText = `\n![Image | ${imageWidths.autoNote}](${key})\n`;
                     } catch (e) {
                         console.error('Clipboard image error', e);
@@ -807,7 +823,7 @@ function App() {
         const file = e.target.files?.[0];
         if (!file) return;
         try {
-            const key = await saveImageToDB(file);
+            const key = await saveImageToAssetStore(file);
             const markdown = `![Image | ${imageWidths.pasted}](${key})`;
 
             const view = editorRef.current;
@@ -869,7 +885,7 @@ function App() {
                 e.preventDefault(); // ADD THIS LINE to stop default paste behavior
                 const blob = items[i].getAsFile();
                 try {
-                    const key = await saveImageToDB(blob);
+                    const key = await saveImageToAssetStore(blob);
                     const markdown = `![Image | ${imageWidths.pasted}](${key})`;
 
                     const view = editorRef.current;
@@ -928,7 +944,7 @@ function App() {
         // Configuration based on active provider
         const config = {
             provider: aiProvider,
-            apiKey: aiProvider === 'gemini' ? geminiApiKey : apiKeys[activeApiKeyIndex],
+            apiKey: aiProvider === 'gemini' ? geminiKeys[activeGeminiIndex] : apiKeys[activeApiKeyIndex],
             model: aiProvider === 'gemini' ? geminiModel : 'llama-3.3-70b-versatile',
             systemInstruction: MAGIC_REFINE_PROMPT,
             prompt: `Refine this note. Return only markdown: \n\n${textToRefine}`,
@@ -975,7 +991,7 @@ function App() {
 
         const config = {
             provider: aiProvider,
-            apiKey: aiProvider === 'gemini' ? geminiApiKey : apiKeys[activeApiKeyIndex],
+            apiKey: aiProvider === 'gemini' ? geminiKeys[activeGeminiIndex] : apiKeys[activeApiKeyIndex],
             model: aiProvider === 'gemini' ? geminiModel : 'llama-3.3-70b-versatile',
             systemInstruction: CUSTOM_REFINE_SYSTEM_PROMPT,
             prompt: `[USER INSTRUCTION]: "${customRefineText}"\n[CONTENT TO REFINE]:\n${textToRefine}\nRefine the content above. Return ONLY the final markdown.`,
@@ -1080,7 +1096,7 @@ function App() {
 
         const config = {
             provider: aiProvider,
-            apiKey: aiProvider === 'gemini' ? geminiApiKey : apiKeys[activeApiKeyIndex],
+            apiKey: aiProvider === 'gemini' ? geminiKeys[activeGeminiIndex] : apiKeys[activeApiKeyIndex],
             model: aiProvider === 'gemini' ? geminiModel : 'llama-3.3-70b-versatile',
             systemInstruction: BREAK_MATH_PROMPT,
             prompt: `Split this math block into exactly ${segmentsNum} logical separate blocks:\n\n${selectedText}`,
@@ -1926,11 +1942,7 @@ function App() {
                                 >
                                     <ClipboardCheck size={18} />
                                 </button>
-                                {canUndoRefine && lastRefinedNoteId === activeNoteId && (
-                                    <button className="btn-undo-refine" onClick={handleUndoRefine} title="Undo AI Change">
-                                        <RotateCcw size={14} />
-                                    </button>
-                                )}
+                                {/* Undo button removed as requested */}
                                 <button className="btn-custom-refine" onClick={() => setIsCustomRefineOpen(true)} disabled={isRefining || !activeNote} title="Custom Refine">
                                     <Wand2 size={14} />
                                 </button>
@@ -2028,9 +2040,48 @@ function App() {
 
                                     {aiProvider === 'gemini' ? (
                                         <>
-                                            <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
-                                                <span className="settings-row-title">Gemini API Key</span>
-                                                <input type="password" value={geminiApiKey} onChange={(e) => setGeminiApiKey(e.target.value)} placeholder="AIzaSy..." className="elite-input" />
+                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                {geminiKeys.map((key, idx) => (
+                                                    <div 
+                                                        key={idx} 
+                                                        className={`elite-radio-row ${activeGeminiIndex === idx ? 'active' : ''}`}
+                                                        onClick={() => setActiveGeminiIndex(idx)}
+                                                    >
+                                                        <div className="custom-radio"><div className="custom-radio-inner" /></div>
+                                                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                <span className="settings-row-title" style={{ fontSize: '0.8rem' }}>Gemini API Key {idx + 1}</span>
+                                                                {geminiKeys.length > 1 && (
+                                                                    <Trash2 size={14} style={{cursor:'pointer', color:'#ff4d4d'}} onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        const newKeys = geminiKeys.filter((_, i) => i !== idx);
+                                                                        setGeminiKeys(newKeys);
+                                                                        if (activeGeminiIndex >= newKeys.length) setActiveGeminiIndex(newKeys.length - 1);
+                                                                    }} />
+                                                                )}
+                                                            </div>
+                                                            <input 
+                                                                type="password" 
+                                                                value={key} 
+                                                                onChange={(e) => {
+                                                                    const newKeys = [...geminiKeys];
+                                                                    newKeys[idx] = e.target.value;
+                                                                    setGeminiKeys(newKeys);
+                                                                }} 
+                                                                onClick={(e) => e.stopPropagation()} 
+                                                                placeholder="AIzaSy..." 
+                                                                className="elite-input" 
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {geminiKeys.length < 5 && (
+                                                    <div className="settings-row" style={{ justifyContent: 'center', padding: '8px', borderBottom: '1px solid var(--border-color)' }}>
+                                                        <button className="btn-secondary" onClick={() => setGeminiKeys([...geminiKeys, ''])}>
+                                                            <Plus size={14} /> Add Gemini Key
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
                                                 <span className="settings-row-title">Select Model</span>
@@ -2051,7 +2102,17 @@ function App() {
                                                 >
                                                     <div className="custom-radio"><div className="custom-radio-inner" /></div>
                                                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                        <span className="settings-row-title" style={{ fontSize: '0.8rem' }}>Groq API Key {idx + 1}</span>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                            <span className="settings-row-title" style={{ fontSize: '0.8rem' }}>Groq API Key {idx + 1}</span>
+                                                            {apiKeys.length > 1 && (
+                                                                <Trash2 size={14} style={{cursor:'pointer', color:'#ff4d4d'}} onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const newKeys = apiKeys.filter((_, i) => i !== idx);
+                                                                    setApiKeys(newKeys);
+                                                                    if (activeApiKeyIndex >= newKeys.length) setActiveApiKeyIndex(newKeys.length - 1);
+                                                                }} />
+                                                            )}
+                                                        </div>
                                                         <input 
                                                             type="password" 
                                                             value={key} 
@@ -2060,13 +2121,20 @@ function App() {
                                                                 newKeys[idx] = e.target.value;
                                                                 setApiKeys(newKeys);
                                                             }} 
-                                                            onClick={(e) => e.stopPropagation()} /* Prevent radio click when typing */
+                                                            onClick={(e) => e.stopPropagation()} 
                                                             placeholder={`gsk_key_0${idx + 1}...`} 
                                                             className="elite-input" 
                                                         />
                                                     </div>
                                                 </div>
                                             ))}
+                                            {apiKeys.length < 5 && (
+                                                <div className="settings-row" style={{ justifyContent: 'center', padding: '8px' }}>
+                                                    <button className="btn-secondary" onClick={() => setApiKeys([...apiKeys, ''])}>
+                                                        <Plus size={14} /> Add Groq Key
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -2098,11 +2166,23 @@ function App() {
                                     <div className="settings-row" style={{ gap: '16px' }}>
                                         <div style={{ flex: 1 }}>
                                             <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Pasted Image Width (px)</span>
-                                            <input type="number" value={imageWidths.pasted} onChange={(e) => setImageWidths({ ...imageWidths, pasted: parseInt(e.target.value) || 300 })} className="elite-input" />
+                                            <input 
+                                                type="number" 
+                                                value={imageWidths.pasted} 
+                                                onChange={(e) => setImageWidths({ ...imageWidths, pasted: e.target.value === '' ? '' : parseInt(e.target.value) })} 
+                                                onBlur={() => setImageWidths({ ...imageWidths, pasted: imageWidths.pasted || 300 })}
+                                                className="elite-input" 
+                                            />
                                         </div>
                                         <div style={{ flex: 1 }}>
                                             <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Auto-Note Image Width (px)</span>
-                                            <input type="number" value={imageWidths.autoNote} onChange={(e) => setImageWidths({ ...imageWidths, autoNote: parseInt(e.target.value) || 450 })} className="elite-input" />
+                                            <input 
+                                                type="number" 
+                                                value={imageWidths.autoNote} 
+                                                onChange={(e) => setImageWidths({ ...imageWidths, autoNote: e.target.value === '' ? '' : parseInt(e.target.value) })} 
+                                                onBlur={() => setImageWidths({ ...imageWidths, autoNote: imageWidths.autoNote || 450 })}
+                                                className="elite-input" 
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -2134,7 +2214,14 @@ function App() {
                                     <div className="settings-row">
                                         <div style={{ flex: 1 }}>
                                             <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Font Size (px)</span>
-                                            <input type="number" value={typography.size} onChange={(e) => setTypography({ ...typography, size: parseInt(e.target.value) })} className="elite-input" style={{ width: '50%' }} />
+                                            <input 
+                                                type="number" 
+                                                value={typography.size} 
+                                                onChange={(e) => setTypography({ ...typography, size: e.target.value === '' ? '' : parseInt(e.target.value) })} 
+                                                onBlur={() => setTypography({ ...typography, size: typography.size || 13 })}
+                                                className="elite-input" 
+                                                style={{ width: '50%' }} 
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -2222,12 +2309,22 @@ function App() {
                         <div className="custom-refine-body">
                             <label className="modal-label">Instruction</label>
                             <textarea
+                                autoFocus
                                 value={customRefineText}
                                 onChange={(e) => setCustomRefineText(e.target.value)}
+                                onKeyDown={(e) => {
+                                    // Submit on Enter, allow multi-line with Shift+Enter
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        handleCustomRefine();
+                                    }
+                                }}
                                 placeholder="e.g., Break this math block into 2 smaller one, Change tone to academic..."
                                 className="custom-refine-textarea"
                             />
-
+                            <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '4px', textAlign: 'right' }}>
+                                Press <strong>Enter</strong> to refine, <strong>Shift + Enter</strong> for new line
+                            </div>
                             <div className="modal-btns" style={{ marginTop: '12px' }}>
                                 <button className="btn-secondary" onClick={handleSaveCustomInstruction} title="Save current instruction as a preset">
                                     <Plus size={14} /> Save Preset
@@ -2261,8 +2358,8 @@ function App() {
             {promptState.isOpen && (
                 <div className="modal-overlay">
                     <div className="modal-content">
-                        <h3>Prompt</h3>
-                        <p>{promptState.message}</p>
+                        {/* Removed the word "Prompt" and used the message as the header */}
+                        <h3>{promptState.message.replace(':', '')}</h3>
                         <input
                             type="text"
                             autoFocus

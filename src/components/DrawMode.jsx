@@ -25,20 +25,31 @@ export default function DrawMode({ initialImageKey, onSave, onClose }) {
     // Load initial image if editing
     useEffect(() => {
         if (initialImageKey) {
-            localforage.getItem(initialImageKey).then(blob => {
-                if (blob) {
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                        const img = new Image();
-                        img.onload = () => {
-                            setBaseImage(img);
-                            setCanvasSize({ w: img.width, h: img.height });
+            if (initialImageKey.startsWith('poring-asset://')) {
+                const img = new Image();
+                img.crossOrigin = "Anonymous"; // Prevent canvas tainting
+                img.onload = () => {
+                    setBaseImage(img);
+                    setCanvasSize({ w: img.width, h: img.height });
+                };
+                img.src = initialImageKey;
+            } else {
+                // Legacy
+                localforage.getItem(initialImageKey).then(blob => {
+                    if (blob) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                            const img = new Image();
+                            img.onload = () => {
+                                setBaseImage(img);
+                                setCanvasSize({ w: img.width, h: img.height });
+                            };
+                            img.src = event.target.result;
                         };
-                        img.src = event.target.result;
-                    };
-                    reader.readAsDataURL(blob);
-                }
-            });
+                        reader.readAsDataURL(blob);
+                    }
+                });
+            }
         }
     }, [initialImageKey]);
 
@@ -251,8 +262,18 @@ export default function DrawMode({ initialImageKey, onSave, onClose }) {
     const handleSave = () => {
         const canvas = canvasRef.current;
         canvas.toBlob(async (blob) => {
-            const newKey = `poring_img_${Date.now()}`;
-            await localforage.setItem(newKey, blob);
+            let newKey;
+            // Native Save
+            if (window.electronAPI && window.electronAPI.saveAsset) {
+                const arrayBuffer = await blob.arrayBuffer(); // Send raw ArrayBuffer
+                const filename = `img_draw_${Date.now()}.png`;
+                await window.electronAPI.saveAsset(filename, arrayBuffer);
+                newKey = `poring-asset://${filename}`;
+            } else {
+                // Legacy Save
+                newKey = `poring_img_${Date.now()}`;
+                await localforage.setItem(newKey, blob);
+            }
             onSave(newKey, initialImageKey);
         }, 'image/png');
     };

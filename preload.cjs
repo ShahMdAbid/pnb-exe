@@ -27,4 +27,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.removeAllListeners('update-message');
         ipcRenderer.on('update-message', (event, message) => callback(message));
     },
+    saveAsset: (filename, buffer) => ipcRenderer.invoke('save-asset', { filename, buffer }),
 });
