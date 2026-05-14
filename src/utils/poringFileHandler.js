@@ -71,17 +71,16 @@ export const importPoringFile = async (file) => {
         let markdown = await loadedZip.file("document.md").async("string");
 
         // 2. Extract images
-        const assetsFolder = loadedZip.folder("assets");
-        if (assetsFolder) {
-            const files = Object.keys(assetsFolder.files);
-
-            for (const pathKey of files) {
-                if (assetsFolder.files[pathKey].dir) continue;
-
-                // filename could be "img_123.png" or "poring_img_123.png"
-                const filename = pathKey.split('/').pop();
-                const blob = await assetsFolder.files[pathKey].async("blob");
-
+        // FIX: JSZip's .files returns EVERYTHING. We strictly filter for files inside "assets/"
+        const allFilePaths = Object.keys(loadedZip.files);
+        
+        for (const pathKey of allFilePaths) {
+            // Only process files that are physically inside the assets/ folder in the zip
+            if (pathKey.startsWith('assets/') && !loadedZip.files[pathKey].dir) {
+                
+                const filename = pathKey.replace('assets/', ''); // extracts "img_123.png"
+                const blob = await loadedZip.files[pathKey].async("blob");
+                
                 if (window.electronAPI && window.electronAPI.saveAsset) {
                     // --- NATIVE IMPORT ---
                     const arrayBuffer = await blob.arrayBuffer();
@@ -91,7 +90,7 @@ export const importPoringFile = async (file) => {
                     if (filename.startsWith('poring_img_')) {
                         finalFilename = filename.replace('poring_img_', 'img_legacy_');
                         const oldMarkdownKey = filename.split('.')[0]; // e.g. "poring_img_123"
-
+                        
                         // Replace the old reference in the markdown string with the new native protocol
                         markdown = markdown.replaceAll(`(${oldMarkdownKey})`, `(poring-asset://${finalFilename})`);
                     }
@@ -100,7 +99,7 @@ export const importPoringFile = async (file) => {
                     await window.electronAPI.saveAsset(finalFilename, arrayBuffer);
                 } else {
                     // --- LEGACY WEB IMPORT ---
-                    const originalKey = filename.split('.')[0];
+                    const originalKey = filename.split('.')[0]; 
                     await localforage.setItem(originalKey, blob);
                 }
             }

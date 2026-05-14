@@ -442,20 +442,40 @@ function App() {
     useEffect(() => {
         const loadAppData = async () => {
             try {
-                const savedNotes = await localforage.getItem('poring_notes') || [];
-                const savedFolders = await localforage.getItem('poring_folders') || [];
-                const savedActiveId = await localforage.getItem('poring_active_note') || ABOUT_NOTE.id;
+                // 1. TRY NATIVE LOAD FIRST
+                let workspace = null;
+                if (window.electronAPI && window.electronAPI.loadWorkspace) {
+                    workspace = await window.electronAPI.loadWorkspace();
+                }
 
-                const filtered = savedNotes.filter(n =>
-                    !n.id.startsWith('about-poring-notebook') &&
-                    n.id !== 'welcome-note-default'
-                );
+                if (workspace && workspace.notes && workspace.notes.length > 0) {
+                    // NATIVE LOAD SUCCESSFUL
+                    setNotes([ABOUT_NOTE, ...workspace.notes]);
+                    setFolders(workspace.folders || []);
+                    setActiveNoteId(workspace.activeNoteId || ABOUT_NOTE.id);
+                } else {
+                    // 2. LEGACY WEB FALLBACK & MIGRATION
+                    const savedNotes = await localforage.getItem('poring_notes') || [];
+                    const savedFolders = await localforage.getItem('poring_folders') || [];
+                    const savedActiveId = await localforage.getItem('poring_active_note') || ABOUT_NOTE.id;
 
-                setNotes([ABOUT_NOTE, ...filtered]);
-                setFolders(savedFolders);
-                setActiveNoteId(savedActiveId);
+                    const filtered = savedNotes.filter(n =>
+                        !n.id.startsWith('about-poring-notebook') &&
+                        n.id !== 'welcome-note-default'
+                    );
+
+                    setNotes([ABOUT_NOTE, ...filtered]);
+                    setFolders(savedFolders);
+                    setActiveNoteId(savedActiveId);
+
+                    // AUTO-MIGRATION: Save these old DB notes straight to the OS Native Folder!
+                    if (window.electronAPI && window.electronAPI.syncWorkspace && filtered.length > 0) {
+                        await window.electronAPI.syncWorkspace({ notes: filtered, folders: savedFolders, activeNoteId: savedActiveId });
+                        console.log("Auto-Migrated IndexedDB notes to Native OS Folder!");
+                    }
+                }
             } catch (error) {
-                console.error("Failed to load data from IndexedDB", error);
+                console.error("Failed to load data", error);
             } finally {
                 setIsBooting(false); // App is ready!
             }
@@ -618,9 +638,19 @@ function App() {
     }, [aiProvider, geminiKeys, activeGeminiIndex, geminiModel, apiKeys, activeApiKeyIndex]);
     useEffect(() => {
         if (!isBooting) {
-            localforage.setItem('poring_notes', notes);
-            localforage.setItem('poring_folders', folders);
-            localforage.setItem('poring_active_note', activeNoteId || '');
+            if (window.electronAPI && window.electronAPI.syncWorkspace) {
+                // --- NATIVE SAVE ---
+                // We strip out the internal About Note so it doesn't clutter the disk
+                const filteredNotes = notes.filter(n => !n.id.startsWith('about-poring-notebook') && n.id !== 'welcome-note-default');
+                window.electronAPI.syncWorkspace({ notes: filteredNotes, folders, activeNoteId });
+            } else {
+                // --- LEGACY WEB SAVE ---
+                localforage.setItem('poring_notes', notes);
+                localforage.setItem('poring_folders', folders);
+                localforage.setItem('poring_active_note', activeNoteId || '');
+            }
+
+            // Keep lightweight settings in localStorage
             localStorage.setItem('poring_typography', JSON.stringify(typography));
             localStorage.setItem('poring_spacing', spacing);
             localStorage.setItem('poring_theme', theme);
@@ -1648,10 +1678,13 @@ function App() {
                     <div className="sidebar-header">
                         <div className="sidebar-action-row">
                             <button className="sidebar-icon-btn" onClick={() => createNote()} title="New Note">
-                                <FilePlus size={16} />
+                                <Plus size={18} />
                             </button>
                             <button className="sidebar-icon-btn" onClick={() => createFolder()} title="New Folder">
-                                <FolderPlus size={16} />
+                                <FolderPlus size={18} />
+                            </button>
+                            <button className="sidebar-icon-btn" onClick={() => window.electronAPI?.openNotesFolder()} title="Open Native Notes Folder in OS">
+                                <Folder size={16} />
                             </button>
                             <button className="sidebar-icon-btn" onClick={() => importInputRef.current?.click()} title="Import .zip">
                                 <Upload size={16} />

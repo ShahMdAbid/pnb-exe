@@ -130,6 +130,85 @@ if (!gotTheLock) {
     });
     // --- END NATIVE INFRASTRUCTURE ---
 
+    // --- NATIVE NOTES INFRASTRUCTURE ---
+    const notesDir = path.join(userDataPath, 'notes');
+    if (!fs.existsSync(notesDir)) {
+      fs.mkdirSync(notesDir, { recursive: true });
+    }
+
+    let cachedNotesHash = {}; // Tracks note changes so we only write to disk when needed
+
+    // Load Notes
+    ipcMain.handle('load-workspace', () => {
+      const workspacePath = path.join(userDataPath, 'workspace.json');
+      if (!fs.existsSync(workspacePath)) return null; // Returns null if no native workspace exists yet
+      
+      try {
+        const data = JSON.parse(fs.readFileSync(workspacePath, 'utf8'));
+        const safeName = (name) => name.replace(/[^a-zA-Z0-9 -]/g, '').trim() || 'Untitled';
+        
+        const notes = data.noteMeta.map(meta => {
+          // Reconstruct the filename: "My Note_12345.md"
+          const mdPath = path.join(notesDir, `${safeName(meta.name)}_${meta.id}.md`);
+          const content = fs.existsSync(mdPath) ? fs.readFileSync(mdPath, 'utf8') : '';
+          
+          // Seed the cache so we don't rewrite it immediately on first render
+          cachedNotesHash[meta.id] = content.length + meta.name;
+          
+          return { ...meta, content };
+        });
+        return { notes, folders: data.folders, activeNoteId: data.activeNoteId };
+      } catch (err) {
+        console.error("Failed to load native workspace", err);
+        return null;
+      }
+    });
+
+    // Save Notes (Smart Sync)
+    ipcMain.handle('sync-workspace', (event, { notes, folders, activeNoteId }) => {
+      const safeName = (name) => name.replace(/[^a-zA-Z0-9 -]/g, '').trim() || 'Untitled';
+      
+      // 1. Sync metadata structure
+      const noteMeta = notes.map(n => ({ id: n.id, name: n.name, folderId: n.folderId }));
+      fs.writeFileSync(path.join(userDataPath, 'workspace.json'), JSON.stringify({ folders, activeNoteId, noteMeta }, null, 2));
+
+      // 2. Sync contents efficiently
+      const currentFileNames = new Set();
+      
+      notes.forEach(n => {
+        if (n.id.startsWith('about-poring-notebook')) return; // Ignore internal guide
+        
+        const fileName = `${safeName(n.name)}_${n.id}.md`;
+        currentFileNames.add(fileName);
+        
+        // Simple hash to avoid disk I/O if the note hasn't changed
+        const hash = n.content.length + n.name; 
+        if (cachedNotesHash[n.id] !== hash) {
+          fs.writeFileSync(path.join(notesDir, fileName), n.content || '');
+          cachedNotesHash[n.id] = hash;
+        }
+      });
+
+      // 3. Clean up deleted/renamed files from the OS disk
+      if (fs.existsSync(notesDir)) {
+        const files = fs.readdirSync(notesDir);
+        files.forEach(file => {
+          if (file.endsWith('.md') && !currentFileNames.has(file)) {
+            try {
+              fs.unlinkSync(path.join(notesDir, file));
+            } catch (e) {}
+          }
+        });
+      }
+      return true;
+    });
+
+    // Let user open the native folder in their OS File Explorer
+    ipcMain.on('open-notes-folder', () => {
+      shell.openPath(notesDir);
+    });
+    // --- END NATIVE NOTES INFRASTRUCTURE ---
+
     createWindow();
     app.on('activate', function () {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

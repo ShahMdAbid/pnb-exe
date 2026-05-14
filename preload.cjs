@@ -28,4 +28,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('update-message', (event, message) => callback(message));
     },
     saveAsset: (filename, buffer) => ipcRenderer.invoke('save-asset', { filename, buffer }),
+    loadWorkspace: () => ipcRenderer.invoke('load-workspace'),
+    syncWorkspace: (data) => ipcRenderer.invoke('sync-workspace', data),
+    openNotesFolder: () => ipcRenderer.send('open-notes-folder'),
 });
