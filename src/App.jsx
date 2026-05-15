@@ -20,7 +20,7 @@ import {
     Bot, ExternalLink, Upload, Wand2, RotateCcw, Wrench, Palette, Scissors,
     AlignLeft, AlignCenter, AlignRight, Minus, Square, Columns, PenTool, Eye,
     Search, FilePlus, Bold, Italic, Underline, Strikethrough, Highlighter, Pen,
-    Monitor
+    Monitor, Cloud
 } from 'lucide-react';
 import DrawMode from './components/DrawMode';
 import 'katex/dist/katex.min.css';
@@ -131,7 +131,7 @@ const CustomImage = ({ src, alt }) => {
         } else {
             setImgSrc(resolvedSrc);
         }
-        
+
         return () => {
             if (objectUrl) URL.revokeObjectURL(objectUrl);
         };
@@ -355,6 +355,7 @@ function App() {
     const [viewMode, setViewMode] = useState('split');
     const [searchQuery, setSearchQuery] = useState('');
     const [drawModeState, setDrawModeState] = useState({ isOpen: false, editKey: null });
+    const [workspacePath, setWorkspacePath] = useState('Loading...');
 
     // Listen for Double Click from Preview
     useEffect(() => {
@@ -446,6 +447,9 @@ function App() {
                 let workspace = null;
                 if (window.electronAPI && window.electronAPI.loadWorkspace) {
                     workspace = await window.electronAPI.loadWorkspace();
+                    // NEW: Fetch the workspace path
+                    const path = await window.electronAPI.getWorkspace();
+                    setWorkspacePath(path);
                 }
 
                 if (workspace && workspace.notes && workspace.notes.length > 0) {
@@ -671,7 +675,7 @@ function App() {
         if (typeof window !== 'undefined' && window.electronAPI) {
             window.electronAPI.onClipboardUpdate(async (payload) => {
                 if (!isAutoNoteEnabledRef.current) return;
-                
+
                 let appendText = '';
                 if (payload.type === 'text') {
                     const rawText = payload.text;
@@ -693,7 +697,7 @@ function App() {
                         } catch (err) {
                             console.error("AI Clipboard Fix failed:", err);
                             showToast("AI Fix failed. Adding raw text.");
-                            appendText = `\n${rawText}\n`; 
+                            appendText = `\n${rawText}\n`;
                         }
                     } else {
                         appendText = `\n${rawText}\n`;
@@ -1683,9 +1687,6 @@ function App() {
                             <button className="sidebar-icon-btn" onClick={() => createFolder()} title="New Folder">
                                 <FolderPlus size={18} />
                             </button>
-                            <button className="sidebar-icon-btn" onClick={() => window.electronAPI?.openNotesFolder()} title="Open Native Notes Folder in OS">
-                                <Folder size={16} />
-                            </button>
                             <button className="sidebar-icon-btn" onClick={() => importInputRef.current?.click()} title="Import .zip">
                                 <Upload size={16} />
                             </button>
@@ -2012,6 +2013,31 @@ function App() {
                         <div className="preview-header">
                             <span>PDF Preview</span>
                             <div style={{ display: 'flex', gap: '8px' }}>
+                                {/* NEW GOOGLE DOCS PIPELINE BUTTON */}
+                                <button
+                                    className="btn-export"
+                                    style={{ color: '#3b82f6', borderColor: 'rgba(59, 130, 246, 0.3)', background: 'rgba(59, 130, 246, 0.05)' }}
+                                    onClick={async () => {
+                                        if (!window.electronAPI?.exportToDocx) return;
+                                        try {
+                                            showToast("Generating .docx...");
+                                            const result = await window.electronAPI.exportToDocx({
+                                                markdown: activeNote.content,
+                                                title: activeNote.name
+                                            });
+                                            if (result.success) {
+                                                showToast("Export Successful!");
+                                            }
+                                        } catch (err) {
+                                            alert(err.error);
+                                        }
+                                    }}
+                                    disabled={!activeNote}
+                                    title="Export as Word Document"
+                                >
+                                    <FileText size={14} /> Export .docx
+                                </button>
+
                                 <button className="btn-export" onClick={handleExportPoring} disabled={!activeNote} title="Export as .zip file">
                                     <Download size={14} /> .zip
                                 </button>
@@ -2042,7 +2068,7 @@ function App() {
             {isSettingsOpen && (
                 <div className="modal-overlay" onMouseDown={() => setIsSettingsOpen(false)}>
                     <div className="modal-content settings-modal-container" onMouseDown={e => e.stopPropagation()}>
-                        
+
                         {/* Header */}
                         <div className="settings-header">
                             <h3>Preferences</h3>
@@ -2051,7 +2077,37 @@ function App() {
 
                         {/* Body */}
                         <div className="settings-body">
-                            
+                            {/* --- NEW SECTION: Storage & Workspace --- */}
+                            <div className="settings-group">
+                                <span className="settings-label-main">Storage & Sync</span>
+                                <div className="settings-card">
+                                    <div className="settings-row" style={{ borderBottom: 'none' }}>
+                                        <div className="settings-row-info">
+                                            <span className="settings-row-title">Workspace Folder</span>
+                                            <span className="settings-row-desc" style={{ wordBreak: 'break-all', paddingRight: '12px' }}>
+                                                {workspacePath}
+                                            </span>
+                                        </div>
+                                        <button 
+                                            className="btn-primary"
+                                            style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '0.85rem', flexShrink: 0 }}
+                                            onClick={async () => {
+                                                if(window.electronAPI?.changeWorkspace) {
+                                                    const newPath = await window.electronAPI.changeWorkspace();
+                                                    if(newPath) {
+                                                        setWorkspacePath(newPath);
+                                                        alert("Workspace changed! The app will now reload to load your notes from the new folder.");
+                                                        window.location.reload();
+                                                    }
+                                                }
+                                            }}
+                                        >
+                                            Change Folder
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Section: AI Provider */}
                             <div className="settings-group">
                                 <span className="settings-label-main">AI Provider Settings</span>
@@ -2060,9 +2116,9 @@ function App() {
                                         <div className="settings-row-info">
                                             <span className="settings-row-title">Active Provider</span>
                                         </div>
-                                        <select 
-                                            className="elite-select" 
-                                            value={aiProvider} 
+                                        <select
+                                            className="elite-select"
+                                            value={aiProvider}
                                             onChange={(e) => setAiProvider(e.target.value)}
                                             style={{ width: '180px' }}
                                         >
@@ -2075,8 +2131,8 @@ function App() {
                                         <>
                                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                                                 {geminiKeys.map((key, idx) => (
-                                                    <div 
-                                                        key={idx} 
+                                                    <div
+                                                        key={idx}
                                                         className={`elite-radio-row ${activeGeminiIndex === idx ? 'active' : ''}`}
                                                         onClick={() => setActiveGeminiIndex(idx)}
                                                     >
@@ -2085,7 +2141,7 @@ function App() {
                                                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                                                 <span className="settings-row-title" style={{ fontSize: '0.8rem' }}>Gemini API Key {idx + 1}</span>
                                                                 {geminiKeys.length > 1 && (
-                                                                    <Trash2 size={14} style={{cursor:'pointer', color:'#ff4d4d'}} onClick={(e) => {
+                                                                    <Trash2 size={14} style={{ cursor: 'pointer', color: '#ff4d4d' }} onClick={(e) => {
                                                                         e.stopPropagation();
                                                                         const newKeys = geminiKeys.filter((_, i) => i !== idx);
                                                                         setGeminiKeys(newKeys);
@@ -2093,17 +2149,17 @@ function App() {
                                                                     }} />
                                                                 )}
                                                             </div>
-                                                            <input 
-                                                                type="password" 
-                                                                value={key} 
+                                                            <input
+                                                                type="password"
+                                                                value={key}
                                                                 onChange={(e) => {
                                                                     const newKeys = [...geminiKeys];
                                                                     newKeys[idx] = e.target.value;
                                                                     setGeminiKeys(newKeys);
-                                                                }} 
-                                                                onClick={(e) => e.stopPropagation()} 
-                                                                placeholder="AIzaSy..." 
-                                                                className="elite-input" 
+                                                                }}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                placeholder="AIzaSy..."
+                                                                className="elite-input"
                                                             />
                                                         </div>
                                                     </div>
@@ -2128,8 +2184,8 @@ function App() {
                                     ) : (
                                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                                             {apiKeys.map((key, idx) => (
-                                                <div 
-                                                    key={idx} 
+                                                <div
+                                                    key={idx}
                                                     className={`elite-radio-row ${activeApiKeyIndex === idx ? 'active' : ''}`}
                                                     onClick={() => setActiveApiKeyIndex(idx)}
                                                 >
@@ -2138,7 +2194,7 @@ function App() {
                                                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                                             <span className="settings-row-title" style={{ fontSize: '0.8rem' }}>Groq API Key {idx + 1}</span>
                                                             {apiKeys.length > 1 && (
-                                                                <Trash2 size={14} style={{cursor:'pointer', color:'#ff4d4d'}} onClick={(e) => {
+                                                                <Trash2 size={14} style={{ cursor: 'pointer', color: '#ff4d4d' }} onClick={(e) => {
                                                                     e.stopPropagation();
                                                                     const newKeys = apiKeys.filter((_, i) => i !== idx);
                                                                     setApiKeys(newKeys);
@@ -2146,17 +2202,17 @@ function App() {
                                                                 }} />
                                                             )}
                                                         </div>
-                                                        <input 
-                                                            type="password" 
-                                                            value={key} 
+                                                        <input
+                                                            type="password"
+                                                            value={key}
                                                             onChange={(e) => {
                                                                 const newKeys = [...apiKeys];
                                                                 newKeys[idx] = e.target.value;
                                                                 setApiKeys(newKeys);
-                                                            }} 
-                                                            onClick={(e) => e.stopPropagation()} 
-                                                            placeholder={`gsk_key_0${idx + 1}...`} 
-                                                            className="elite-input" 
+                                                            }}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            placeholder={`gsk_key_0${idx + 1}...`}
+                                                            className="elite-input"
                                                         />
                                                     </div>
                                                 </div>
@@ -2182,8 +2238,8 @@ function App() {
                                             <span className="settings-row-title">Enable AI Format Fixer</span>
                                             <span className="settings-row-desc">Automatically cleans up formatting when you paste text.</span>
                                         </div>
-                                        <div 
-                                            className={`elite-toggle ${isAiClipboardEnabled ? 'active' : ''}`} 
+                                        <div
+                                            className={`elite-toggle ${isAiClipboardEnabled ? 'active' : ''}`}
                                             onClick={toggleAiClipboard}
                                         >
                                             <div className="elite-toggle-thumb" />
@@ -2199,22 +2255,22 @@ function App() {
                                     <div className="settings-row" style={{ gap: '16px' }}>
                                         <div style={{ flex: 1 }}>
                                             <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Pasted Image Width (px)</span>
-                                            <input 
-                                                type="number" 
-                                                value={imageWidths.pasted} 
-                                                onChange={(e) => setImageWidths({ ...imageWidths, pasted: e.target.value === '' ? '' : parseInt(e.target.value) })} 
+                                            <input
+                                                type="number"
+                                                value={imageWidths.pasted}
+                                                onChange={(e) => setImageWidths({ ...imageWidths, pasted: e.target.value === '' ? '' : parseInt(e.target.value) })}
                                                 onBlur={() => setImageWidths({ ...imageWidths, pasted: imageWidths.pasted || 300 })}
-                                                className="elite-input" 
+                                                className="elite-input"
                                             />
                                         </div>
                                         <div style={{ flex: 1 }}>
                                             <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Auto-Note Image Width (px)</span>
-                                            <input 
-                                                type="number" 
-                                                value={imageWidths.autoNote} 
-                                                onChange={(e) => setImageWidths({ ...imageWidths, autoNote: e.target.value === '' ? '' : parseInt(e.target.value) })} 
+                                            <input
+                                                type="number"
+                                                value={imageWidths.autoNote}
+                                                onChange={(e) => setImageWidths({ ...imageWidths, autoNote: e.target.value === '' ? '' : parseInt(e.target.value) })}
                                                 onBlur={() => setImageWidths({ ...imageWidths, autoNote: imageWidths.autoNote || 450 })}
-                                                className="elite-input" 
+                                                className="elite-input"
                                             />
                                         </div>
                                     </div>
@@ -2247,13 +2303,13 @@ function App() {
                                     <div className="settings-row">
                                         <div style={{ flex: 1 }}>
                                             <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Font Size (px)</span>
-                                            <input 
-                                                type="number" 
-                                                value={typography.size} 
-                                                onChange={(e) => setTypography({ ...typography, size: e.target.value === '' ? '' : parseInt(e.target.value) })} 
+                                            <input
+                                                type="number"
+                                                value={typography.size}
+                                                onChange={(e) => setTypography({ ...typography, size: e.target.value === '' ? '' : parseInt(e.target.value) })}
                                                 onBlur={() => setTypography({ ...typography, size: typography.size || 13 })}
-                                                className="elite-input" 
-                                                style={{ width: '50%' }} 
+                                                className="elite-input"
+                                                style={{ width: '50%' }}
                                             />
                                         </div>
                                     </div>
@@ -2265,14 +2321,14 @@ function App() {
                         {/* Footer */}
                         <div className="settings-footer">
                             <div className="settings-footer-left">
-                                <a 
+                                <a
                                     href="#"
                                     className="btn-get-api"
                                     style={{ padding: 0, background: 'transparent' }}
                                     onClick={(e) => {
-                                        e.preventDefault(); 
-                                        const url = aiProvider === 'gemini' 
-                                            ? 'https://aistudio.google.com/app/apikey' 
+                                        e.preventDefault();
+                                        const url = aiProvider === 'gemini'
+                                            ? 'https://aistudio.google.com/app/apikey'
                                             : 'https://console.groq.com/keys';
                                         if (window.electronAPI && window.electronAPI.openExternal) {
                                             window.electronAPI.openExternal(url);
@@ -2283,13 +2339,13 @@ function App() {
                                 >
                                     <ExternalLink size={14} /> Get {aiProvider === 'gemini' ? 'Gemini' : 'Groq'} Key
                                 </a>
-                                
+
                                 {/* Visual divider */}
                                 <div style={{ width: '1px', height: '16px', background: 'var(--border-color)', margin: '0 8px' }} />
-                                
-                                <button 
-                                    className="btn-secondary" 
-                                    onClick={handleCheckUpdate} 
+
+                                <button
+                                    className="btn-secondary"
+                                    onClick={handleCheckUpdate}
                                     style={{ padding: '6px 12px', border: '1px solid var(--border-color)', borderRadius: '6px', background: 'var(--bg-editor)' }}
                                 >
                                     Check for Updates
@@ -2300,11 +2356,11 @@ function App() {
                                     </span>
                                 )}
                             </div>
-                            
+
                             {/* Save Button explicitly gets padding added back to it */}
-                            <button 
-                                className="btn-primary" 
-                                style={{ padding: '8px 20px', borderRadius: '8px', fontSize: '0.9rem' }} 
+                            <button
+                                className="btn-primary"
+                                style={{ padding: '8px 20px', borderRadius: '8px', fontSize: '0.9rem' }}
                                 onClick={() => setIsSettingsOpen(false)}
                             >
                                 Save & Close
