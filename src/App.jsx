@@ -12,6 +12,12 @@ import { saveAs } from 'file-saver';
 import { exportPoringFile, importPoringFile } from './utils/poringFileHandler';
 import ColorfulEditor from './components/ColorfulEditor';
 import LivePreviewEditor from './components/LivePreviewEditor';
+
+// Standard memoization ensures the editors don't re-render unless their props change.
+import { memo } from 'react';
+const MemoizedColorfulEditor = memo(ColorfulEditor);
+const MemoizedLiveEditor = memo(LivePreviewEditor);
+
 import { EditorView } from '@codemirror/view';
 import {
     Plus, FolderPlus, Folder, FileText, ChevronLeft, ChevronRight,
@@ -20,7 +26,7 @@ import {
     Bot, ExternalLink, Upload, Wand2, RotateCcw, Wrench, Palette, Scissors,
     AlignLeft, AlignCenter, AlignRight, Minus, Square, Columns, PenTool, Eye,
     Search, FilePlus, Bold, Italic, Underline, Strikethrough, Highlighter, Pen,
-    Monitor, Cloud
+    Monitor, Cloud, MessageSquareText
 } from 'lucide-react';
 import DrawMode from './components/DrawMode';
 import 'katex/dist/katex.min.css';
@@ -357,6 +363,42 @@ function App() {
     const [drawModeState, setDrawModeState] = useState({ isOpen: false, editKey: null });
     const [workspacePath, setWorkspacePath] = useState('Loading...');
 
+    // Add this near your other useState declarations
+    const [explanationModal, setExplanationModal] = useState({ isOpen: false, keyword: '', text: '' });
+
+    // Add this function to handle opening the modal
+    const handleOpenExplanation = () => {
+        const view = editorRef.current;
+        if (!view) return;
+        const { from, to } = view.state.selection.main;
+        const selectedText = view.state.sliceDoc(from, to);
+        
+        if (!selectedText.trim()) {
+            alert("Please highlight a word or phrase first!");
+            return;
+        }
+        
+        setExplanationModal({ isOpen: true, keyword: selectedText, text: '' });
+    };
+
+    // Add this function to handle saving the explanation
+    const handleSaveExplanation = () => {
+        const view = editorRef.current;
+        if (!view) return;
+        const { from, to } = view.state.selection.main;
+        const { keyword, text } = explanationModal;
+        
+        const insertText = `[[${keyword}]](${text})`;
+        
+        view.dispatch({
+            changes: { from, to, insert: insertText },
+            selection: { anchor: from + insertText.length }
+        });
+        
+        view.focus();
+        setExplanationModal({ isOpen: false, keyword: '', text: '' });
+    };
+
     // Listen for Double Click from Preview
     useEffect(() => {
         const handleImageEdit = (e) => {
@@ -394,8 +436,18 @@ function App() {
 
         if (oldKey) {
             // We were editing an existing image. Find and replace its key in the document.
-            // We replace it globally in the localContent string so it updates everywhere.
-            setLocalContent(prev => prev.replace(oldKey, newKey));
+            if (view) {
+                const currentText = view.state.doc.toString();
+                if (currentText.includes(oldKey)) {
+                    const start = currentText.indexOf(oldKey);
+                    view.dispatch({
+                        changes: { from: start, to: start + oldKey.length, insert: newKey }
+                    });
+                }
+            } else {
+                editorTextRef.current = editorTextRef.current.replace(oldKey, newKey);
+                setInitialEditorValue(editorTextRef.current);
+            }
         } else if (view) {
             // We created a brand new drawing. Insert it at cursor position.
             const markdown = `\n![Image | ${imageWidths.pasted}](${newKey})\n`;
@@ -410,25 +462,39 @@ function App() {
         setDrawModeState({ isOpen: false, editKey: null });
     };
 
-    // --- PERFORMANCE UPGRADE: LOCAL EDITOR STATE & DEBOUNCE ---
-    const [localContent, setLocalContent] = useState('');
+    // --- PERFORMANCE UPGRADE: UNCONTROLLED EDITOR STATE ---
+    const editorTextRef = useRef('');
+    const [lastTypeTime, setLastTypeTime] = useState(Date.now());
+    const prevNoteIdRef = useRef(activeNoteId);
 
-    // 1. When the user clicks a different note, load its content into the local editor immediately
-    useEffect(() => {
+    // 1. SYNC REF ON NOTE SWITCH (Runs during render to prevent stale data on mount)
+    if (prevNoteIdRef.current !== activeNoteId) {
         const currentNote = notes.find(n => n.id === activeNoteId);
-        setLocalContent(currentNote?.content || '');
-    }, [activeNoteId, notes.length]); // Intentionally omitting 'notes' to prevent cursor jumping
+        editorTextRef.current = currentNote?.content || '';
+        prevNoteIdRef.current = activeNoteId;
+    }
 
-    // 2. Debounce: Wait 300ms after typing stops before saving to the global notes array
+    // 2. The Editor onChange (Fires on every keystroke, NO re-renders!)
+    const handleEditorChange = React.useCallback((val) => {
+        editorTextRef.current = val; 
+        setLastTypeTime(Date.now()); // Ping React to trigger the debouncer
+    }, []);
+
+    // 3. The SMART Preview Updater & Auto-Saver
     useEffect(() => {
+        // Small files (< 20k chars): update every 600ms. Massive files: update every 2500ms
+        const textLength = editorTextRef.current?.length || 0;
+        const delay = textLength > 20000 ? 2500 : 600; 
+
         const handler = setTimeout(() => {
             const currentNote = notes.find(n => n.id === activeNoteId);
-            if (currentNote && currentNote.content !== localContent) {
-                updateContent(localContent);
+            if (currentNote && currentNote.content !== editorTextRef.current) {
+                updateContent(editorTextRef.current);
             }
-        }, 300);
+        }, delay);
+
         return () => clearTimeout(handler);
-    }, [localContent, activeNoteId]);
+    }, [lastTypeTime, activeNoteId]);
 
     const handleDropNote = (e, targetFolderId) => {
         e.preventDefault();
@@ -486,6 +552,67 @@ function App() {
         };
         loadAppData();
     }, []);
+
+    useEffect(() => {
+        // Migration Script: Runs once to convert custom syntax to HTML
+        const hasMigrated = localStorage.getItem('poring_syntax_migrated_v2');
+        
+        if (!hasMigrated && notes.length > 1) { // > 1 to ignore just the About Note
+            console.log("Migrating custom syntax to Standard HTML...");
+            
+            const migratedNotes = notes.map(note => {
+                if (note.id.startsWith('about-')) return note;
+                let text = note.content;
+
+                // 1. Alignments
+                text = text.replace(/center\[([\s\S]*?)\]/g, '<div align="center">$1</div>');
+                text = text.replace(/right\[([\s\S]*?)\]/g, '<div align="right">$1</div>');
+                text = text.replace(/left\[([\s\S]*?)\]/g, '<div align="left">$1</div>');
+
+                // 2. Colors (Recursive replacement to handle slight nesting)
+                const colors = ['red', 'blue', 'green', 'orange', 'purple', 'gray'];
+                colors.forEach(color => {
+                    let prevText;
+                    do {
+                        prevText = text;
+                        const regex = new RegExp(`${color}\\[([^\\]]+)\\]`, 'g');
+                        text = text.replace(regex, `<span style="color: ${color};">$1</span>`);
+                    } while (text !== prevText);
+                });
+
+                // 3. Highlights & Underlines
+                text = text.replace(/==([\s\S]*?)==/g, '<mark>$1</mark>');
+                text = text.replace(/\+\+([\s\S]*?)\+\+/g, '<u>$1</u>');
+
+                // 4. Color Highlights (e.g., green==text==)
+                colors.forEach(color => {
+                    const regex = new RegExp(`${color}==([\\s\\S]*?)==`, 'g');
+                    text = text.replace(regex, `<mark style="background-color: light${color};">$1</mark>`);
+                });
+
+                // 5. Page Breaks & Spaces
+                text = text.replace(/^\s*\*\*\*\s*$/gm, '<div style="page-break-before: always;"></div>');
+                text = text.replace(/^\s*\/\/(\d+)\s*$/gm, (match, p1) => '<br>'.repeat(parseInt(p1, 10)));
+
+                // 6. Interactive Footnotes -> Standard Markdown Footnotes
+                let footnoteCounter = 1;
+                let footnotesAppendix = "\n\n---\n\n";
+                text = text.replace(/\[\[(.+?)\]\]\(([\s\S]+?)\)/g, (match, word, explanation) => {
+                    const marker = `[^${footnoteCounter}]`;
+                    footnotesAppendix += `${marker}: **${word}** - ${explanation}\n\n`;
+                    footnoteCounter++;
+                    return `${word}${marker}`;
+                });
+                if (footnoteCounter > 1) text += footnotesAppendix;
+
+                return { ...note, content: text };
+            });
+
+            setNotes(migratedNotes);
+            localStorage.setItem('poring_syntax_migrated_v2', 'true');
+            showToast("Successfully upgraded notes to Standard HTML!");
+        }
+    }, [notes]);
 
     // We need a ref to access the activeNoteId inside our clipboard listener without re-rendering
     const activeNoteIdRef = useRef(activeNoteId);
@@ -1105,11 +1232,10 @@ function App() {
         const num = await requestPrompt("Enter number of lines for vertical spacing:", "1");
         if (num === null) return;
         const x = parseInt(num, 10);
-        if (isNaN(x) || x < 1) {
-            alert("Please enter a valid positive number.");
-            return;
-        }
-        handleFormatting("", `\n//${x}\n`);
+        if (isNaN(x) || x < 1) return;
+        // Insert standard <br> tags instead of //x
+        const breaks = "<br>".repeat(x);
+        handleFormatting("", `\n${breaks}\n`);
     };
 
     const handleBreakMathBlock = async () => {
@@ -1452,6 +1578,8 @@ function App() {
         let c = activeNote?.content || '';
         if (!c) return '';
 
+        // We ONLY need to mask Code blocks and Math blocks so markdown doesn't break them.
+        // rehype-raw will natively handle ALL our new HTML (colors, aligns, page breaks, underlines)
         const placeholders = [];
         const mask = (text, type) => {
             const lineCount = (text.match(/\n/g) || []).length;
@@ -1466,142 +1594,44 @@ function App() {
         c = c.replace(/(\$\$)([\s\S]*?)\1/g, (match) => mask(match, 'BLOCK_MATH'));
         c = c.replace(/(\$)(?!\s)([^$\n]+?)(?<!\s)\1/g, (match) => mask(match, 'INLINE_MATH'));
 
-        const explanations = new Map();
-        c = c.replace(/:::explain\s+(.+?)\n([\s\S]*?)\n:::/g, (match, keyword, content) => {
-            explanations.set(keyword.trim(), content.trim());
-            const lineCount = (match.match(/\n/g) || []).length;
-            return '\n'.repeat(lineCount);
-        });
-
-        const inlineExplainRegex = /\[\[(.+?)\]\]\(/g;
-        let m;
-        while ((m = inlineExplainRegex.exec(c)) !== null) {
-            const keyword = m[1];
-            const start = m.index;
-            const openParenIndex = start + m[0].length - 1;
-            let depth = 1;
-            let j = openParenIndex + 1;
-            while (j < c.length && depth > 0) {
-                if (c[j] === '(') depth++;
-                else if (c[j] === ')') depth--;
-                j++;
-            }
-            if (depth === 0) {
-                const content = c.substring(openParenIndex + 1, j - 1);
-                if (!explanations.has(keyword.trim())) {
-                    explanations.set(keyword.trim(), content.trim());
-                }
-                const lineCount = (content.match(/\n/g) || []).length;
-                const replacement = `[[${keyword}]]` + '\n'.repeat(lineCount);
-                c = c.substring(0, start) + replacement + c.substring(j);
-                inlineExplainRegex.lastIndex = start + replacement.length;
-            }
-        }
-
+        // Today string replacement
         const todayStr = new Intl.DateTimeFormat('en-GB', {
             day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Dhaka'
         }).format(new Date());
+        c = c.replace(/\[today\]/g, todayStr);
 
-        c = c.split('\n').map((line, index) => {
-            const lineNum = index + 1;
-            let processedLine = line;
-            processedLine = processedLine.replace(/\[today\]/g, todayStr);
-            const hMatch = processedLine.match(/^([\s\.]*(?:(?:red|blue|green|orange|purple|gray|center|right|left)\[\s*)*)(#+)/);
-            if (hMatch) {
-                const prefix = hMatch[1];
-                const hashes = hMatch[2];
-                const rest = processedLine.substring(hMatch[0].length);
-                processedLine = hashes + ' ' + prefix + rest;
-            }
-            processedLine = processedLine.replace(/^([#\s]*?)(\.+)/, (match, prefix, dots) => {
-                return prefix + '&nbsp;'.repeat(dots.length * 2);
-            });
-            const vMatch = processedLine.match(/^(\s*)\/\/(\d+)(\s*)$/);
-            if (vMatch) {
-                const prefix = vMatch[1];
-                const num = parseInt(vMatch[2], 10);
-                return `<div class="sync-target v-space" data-source-line="${lineNum}">${(prefix + '&nbsp;<br/>').repeat(num)}</div>`;
-            }
-            if (/^\s*\*\*\*\s*$/.test(processedLine)) {
-                return `<div class="manual-page-break sync-target" data-source-line="${lineNum}"></div>`;
-            }
-            return processedLine;
-        }).join('\n');
+        const explanations = new Map();
+        let footnoteCounter = 1;
 
-        const tags = ['red', 'blue', 'green', 'orange', 'purple', 'gray', 'center', 'right', 'left'];
-        const applyBalanced = (text) => {
-            const regex = new RegExp(`(${tags.join('|')})\\[`, 'g');
-            let match;
-            while ((match = regex.exec(text)) !== null) {
-                const tag = match[1];
-                const start = match.index;
-                const open = start + tag.length;
-                let depth = 1, j = open + 1;
-                while (j < text.length && depth > 0) {
-                    if (text[j] === '[') depth++;
-                    else if (text[j] === ']') depth--;
-                    j++;
-                }
-                if (depth === 0) {
-                    const inner = text.substring(open + 1, j - 1);
-                    const processedInner = applyBalanced(inner);
-                    const replacement = `<span class="${tag}">${processedInner}</span>`;
-                    text = text.substring(0, start) + replacement + text.substring(j);
-                    regex.lastIndex = 0;
-                } else {
-                    regex.lastIndex = open + 1;
-                }
-            }
-            return text;
-        };
-
-        c = applyBalanced(c);
-        c = c.replace(/\+\+([\s\S]*?)\+\+/g, '<span class="underline">$1</span>');
-
-        const highlightColors = ['red', 'blue', 'green', 'orange', 'purple', 'gray'];
-        highlightColors.forEach(cls => {
-            const regex = new RegExp(`${cls}==([\\s\\S]*?)==`, 'g');
-            c = c.replace(regex, `<mark class="bg-${cls}">$1</mark>`);
-        });
-        c = c.replace(/==([\s\S]*?)==/g, '<mark>$1</mark>');
-
-        const keywordCounters = {};
-        c = c.replace(/\[\[(.+?)\]\]/g, (match, keyword) => {
-            const normalized = keyword.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-            if (!keywordCounters[normalized]) keywordCounters[normalized] = 0;
-            keywordCounters[normalized]++;
-            const counter = keywordCounters[normalized];
-            return `<span id="origin_${normalized}_${counter}"></span><a href="#explain_${normalized}" class="keyword-ref">${keyword.trim()}</a>`;
+        // 1. Extract explanations and replace with clickable blue anchors
+        c = c.replace(/\[\[(.+?)\]\]\(([\s\S]+?)\)/g, (match, word, desc) => {
+            const id = `explain_${footnoteCounter}`;
+            explanations.set(id, { word, desc, counter: footnoteCounter });
+            footnoteCounter++;
+            
+            return `<a href="#${id}" class="keyword-ref">${word}</a>`;
         });
 
+        // 2. Append the Explanations to the bottom of the document
         if (explanations.size > 0) {
-            let section = '\n\n<hr>\n\n<div class="explanation-section">';
-            explanations.forEach((content, keyword) => {
-                const normalized = keyword.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-                section += `\n<div id="explain_${normalized}" class="explanation">`;
-                section += `\n\n**${keyword.trim()}**\n\n${content}\n\n`;
-                section += `<a href="#origin_${normalized}_1" class="back-link">&larr; Back</a>`;
-                section += `\n</div>`;
+            let appendix = '\n\n<hr>\n\n<div class="explanation-section">';
+            explanations.forEach((data, id) => {
+                appendix += `\n<div id="${id}" class="explanation">`;
+                appendix += `\n\n**${data.word}**\n\n${data.desc}\n\n`;
+                appendix += `<a href="#" class="back-link">&larr; Back to top</a>`;
+                appendix += `\n</div>`;
             });
-            section += '\n</div>';
-            c += section;
+            appendix += '\n</div>';
+            c += appendix;
         }
 
+        // Restore Math and Code blocks
         placeholders.reverse().forEach(p => {
             let restoredText = p.text;
-
-            // YOUR FIX: Force $$ block $$ to act like a centered block!
-            // This safely bypasses Markdown's list-indentation bugs.
             if (p.key.startsWith('@@BLOCK_MATH_')) {
-                // Extract the inner equation by removing the $$
                 const innerMath = p.text.replace(/^\$\$|\$\$$/g, '');
-
-                // 1. Wrap in a special center span. (Span is used because Markdown safely parses inside it)
-                // 2. Use a single $ so the parser sees it.
-                // 3. Inject \displaystyle so KaTeX knows to render it large like a block!
                 restoredText = `<span class="math-center-wrapper">$\\displaystyle ${innerMath}$</span>`;
             }
-
             c = c.split(p.key + p.padding).join(restoredText);
         });
 
@@ -1846,14 +1876,22 @@ function App() {
                                     <div className="format-toolbar">
                                         <button className="format-btn" onClick={() => handleFormatting("**", "**")} title="Bold"><Bold size={14} /></button>
                                         <button className="format-btn" onClick={() => handleFormatting("*", "*")} title="Italic"><Italic size={14} /></button>
-                                        <button className="format-btn" onClick={() => handleFormatting("++", "++")} title="Underline"><Underline size={14} /></button>
+                                        <button className="format-btn" onClick={() => handleFormatting("<u>", "</u>")} title="Underline"><Underline size={14} /></button>
                                         <button className="format-btn" onClick={() => handleFormatting("~~", "~~")} title="Strikethrough"><Strikethrough size={14} /></button>
-                                        <button className="format-btn" onClick={() => handleFormatting("==", "==")} title="Highlight"><Highlighter size={14} /></button>
+                                        <button className="format-btn" onClick={() => handleFormatting("<mark>", "</mark>")} title="Highlight"><Highlighter size={14} /></button>
                                         <div className="toolbar-divider"></div>
-                                        <button className="format-btn" onClick={() => handleFormatting("center[", "]")} title="Center Align"><AlignCenter size={14} /></button>
+                                        <button className="format-btn" onClick={() => handleFormatting('<div align="center">\n', '\n</div>')} title="Center Align"><AlignCenter size={14} /></button>
 
                                         <div className="toolbar-divider"></div>
                                         <button className="format-btn" onClick={handleOpenDrawMode} title="Draw / Annotate"><Pen size={14} /></button>
+                                        <div className="toolbar-divider"></div>
+                                        <button 
+                                            className="format-btn" 
+                                            onClick={handleOpenExplanation} 
+                                            title="Add Interactive Explanation/Footnote"
+                                        >
+                                            <MessageSquareText size={14} />
+                                        </button>
                                     </div>
 
                                     {/* --- ADVANCED TOOLS DROPDOWN --- */}
@@ -1870,7 +1908,7 @@ function App() {
 
                                         {isToolsMenuOpen && (
                                             <div className="insert-menu tools-menu">
-                                                <div className="insert-option" onClick={() => handleFormatting("", "\n***\n")}>
+                                                <div className="insert-option" onClick={() => handleFormatting("", '\n<div style="page-break-before: always;"></div>\n')}>
                                                     <span>Page Break</span>
                                                 </div>
 
@@ -1891,7 +1929,7 @@ function App() {
                                                                     className="insert-option"
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
-                                                                        handleFormatting(`${clr.toLowerCase()}[`, "]");
+                                                                        handleFormatting(`<span style="color: ${clr.toLowerCase()};">`, "</span>");
                                                                     }}
                                                                 >
                                                                     <div className={`color-dot bg-${clr.toLowerCase()}`} />
@@ -1988,17 +2026,19 @@ function App() {
 
                         {/* THE NEW CONDITIONAL EDITOR RENDERING */}
                         {viewMode === 'live' ? (
-                            <LivePreviewEditor
-                                value={localContent}
-                                onChange={setLocalContent}
+                            <MemoizedLiveEditor
+                                key={`live-${activeNoteId}`}
+                                value={editorTextRef.current}
+                                onChange={handleEditorChange}
                                 onPaste={handlePaste}
                                 placeholder="Start typing... (Live Mode)"
                                 editorViewRef={editorRef}
                             />
                         ) : (
-                            <ColorfulEditor
-                                value={localContent}
-                                onChange={setLocalContent}
+                            <MemoizedColorfulEditor
+                                key={`write-${activeNoteId}`}
+                                value={editorTextRef.current}
+                                onChange={handleEditorChange}
                                 onPaste={handlePaste}
                                 placeholder="Start typing..."
                                 editorViewRef={editorRef}
@@ -2463,6 +2503,45 @@ function App() {
                         <div className="modal-btns">
                             <button onClick={handlePromptCancel}>Cancel</button>
                             <button className="btn-primary" onClick={() => handlePromptSubmit(document.getElementById('custom-prompt-input').value)}>OK</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Explanation Modal */}
+            {explanationModal.isOpen && (
+                <div className="modal-overlay" onClick={() => setExplanationModal({ isOpen: false, keyword: '', text: '' })}>
+                    <div className="modal-content custom-refine-modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>Add Explanation</h3>
+                            <X size={20} className="close-btn" onClick={() => setExplanationModal({ isOpen: false, keyword: '', text: '' })} />
+                        </div>
+                        <div className="custom-refine-body">
+                            <label className="modal-label">Keyword</label>
+                            <input 
+                                type="text" 
+                                value={explanationModal.keyword} 
+                                disabled 
+                                className="elite-input" 
+                                style={{ marginBottom: '15px', background: 'var(--bg-sidebar)', opacity: 0.8 }}
+                            />
+                            
+                            <label className="modal-label">Detailed Explanation</label>
+                            <textarea
+                                autoFocus
+                                value={explanationModal.text}
+                                onChange={(e) => setExplanationModal(prev => ({ ...prev, text: e.target.value }))}
+                                placeholder="Paste or type your detailed explanation here..."
+                                className="custom-refine-textarea"
+                                style={{ minHeight: '150px' }}
+                            />
+                            
+                            <div className="modal-btns" style={{ marginTop: '20px' }}>
+                                <button onClick={() => setExplanationModal({ isOpen: false, keyword: '', text: '' })}>Cancel</button>
+                                <button className="btn-primary" onClick={handleSaveExplanation}>
+                                    Insert Explanation
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -37,12 +37,8 @@ function createMatchPlugin(regex, className) {
 
 // 🚀 OPTIMIZATION 1: Instantiate these heavy plugins OUTSIDE the component so they are created only ONCE.
 const mdExtension = markdown({ base: markdownLanguage, codeLanguages: languages });
-const keywordPlugin = createMatchPlugin(/\b(red|blue|green|orange|purple|gray|center|right|left)(?=\[)/g, "cm-poring-keyword");
-const todayPlugin = createMatchPlugin(/\[today\]/g, "cm-poring-keyword");
-const spacerPlugin = createMatchPlugin(/^\s*\/\/\d+/gm, "cm-poring-spacer");
 const blockMathPlugin = createMatchPlugin(/\$\$[\s\S]*?\$\$/g, "cm-poring-block-math");
 const inlineMathPlugin = createMatchPlugin(/(?<!\$)\$[^$\n]+\$(?!\$)/g, "cm-poring-inline-math");
-const explanationPlugin = createMatchPlugin(/\[\[.*?\]\]\(.*?\)/g, "cm-poring-explanation");
 
 // 🚀 OPTIMIZATION 2: Make basicSetup a stable reference outside the component
 const editorBasicSetup = {
@@ -67,12 +63,8 @@ const ColorfulEditor = ({ value, onChange, onPaste, placeholder, editorViewRef }
         return [
             mdExtension,
             EditorView.lineWrapping,
-            keywordPlugin,
-            todayPlugin,
-            spacerPlugin,
             blockMathPlugin,
             inlineMathPlugin,
-            explanationPlugin,
             EditorView.domEventHandlers({
                 paste: (event, view) => {
                     if (onPasteRef.current) {
