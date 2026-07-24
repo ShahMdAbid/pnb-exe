@@ -572,6 +572,7 @@ html,
 
 .ai-buttons-group {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   margin-left: auto;
@@ -2112,6 +2113,7 @@ html,
 /* --- INLINE FORMATTING TOOLBAR --- */
 .format-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 2px;
   background: var(--bg-sidebar);

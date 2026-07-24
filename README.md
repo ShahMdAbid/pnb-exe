@@ -105,6 +105,13 @@ Click the **`Export`** dropdown menu in the top-right toolbar:
 - **Google Docs**: Direct export pipeline for Google Workspace. *(Note: Google may show a security warning during login. Click continue and give permission).*
 - **Share Archive (`.zip`)**: Export your notes and embedded images as a single `.zip`. Friends can import it directly from their left sidebar!
 
+---
+
+### 11. 🔍 UI Zooming (For Smaller Screens)
+If you are using a laptop with a smaller screen and the toolbar or editor feels cramped, you can easily adjust the UI scale:
+- Press **`Ctrl` + `+`** (or `Cmd` + `+`) to **Zoom In** (Make UI larger).
+- Press **`Ctrl` + `-`** (or `Cmd` + `-`) to **Zoom Out** (Make UI smaller).
+- Press **`Ctrl` + `0`** (or `Cmd` + `0`) to **Reset** the zoom to default.
 
 ---
 

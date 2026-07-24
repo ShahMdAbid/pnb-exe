@@ -6,6 +6,27 @@ const fs = require('fs');
 const { pathToFileURL } = require('url');
 const { exec } = require('child_process');
 
+// Helper to reliably find Pandoc, especially on Windows where PATH might not inherit correctly
+const getPandocPath = () => {
+  const isWin = process.platform === 'win32';
+  const commonPaths = [
+    ...(isWin ? [
+      process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Pandoc', 'pandoc.exe') : null,
+      'C:\\Program Files\\Pandoc\\pandoc.exe',
+      'C:\\Program Files (x86)\\Pandoc\\pandoc.exe'
+    ] : [
+      '/usr/local/bin/pandoc',
+      '/opt/homebrew/bin/pandoc',
+      '/usr/bin/pandoc'
+    ])
+  ].filter(Boolean);
+
+  for (const p of commonPaths) {
+    if (fs.existsSync(p)) return `"${p}"`;
+  }
+  return 'pandoc'; // Fallback to system PATH
+};
+
 // --- MUST BE OUTSIDE app.whenReady() ---
 protocol.registerSchemesAsPrivileged([
   {
@@ -397,12 +418,12 @@ if (!gotTheLock) {
           if (footnotes.length > 0) processedMd += '\n\n' + footnotes.join('\n');
 
           fs.writeFileSync(mdPath, processedMd, 'utf8');
-          const command = `pandoc "${mdPath}" -f markdown -t docx -o "${docxPath}"`;
+          const command = `${getPandocPath()} "${mdPath}" -f markdown -t docx -o "${docxPath}"`;
 
           exec(command, (error) => {
             if (error) {
               console.error("Pandoc Error:", error);
-              return reject({ success: false, error: 'Pandoc failed: ' + error.message });
+              return reject({ success: false, error: 'Pandoc is not installed or not found in PATH. Please install Pandoc from pandoc.org and restart your computer.' });
             }
             resolve({ success: true, docxPath: docxPath });
           });
@@ -486,8 +507,8 @@ if (!gotTheLock) {
             });
             if (footnotes.length > 0) processedMd += '\n\n' + footnotes.join('\n');
             fs.writeFileSync(mdPath, processedMd, 'utf8');
-            exec(`pandoc "${mdPath}" -f markdown -t docx -o "${docxPath}"`, (error) => {
-              if (error) reject(new Error('Pandoc failed: ' + error.message));
+            exec(`${getPandocPath()} "${mdPath}" -f markdown -t docx -o "${docxPath}"`, (error) => {
+              if (error) reject(new Error('Pandoc is not installed or not found in PATH. Please install Pandoc from pandoc.org and restart your computer.'));
               else resolve();
             });
         });
