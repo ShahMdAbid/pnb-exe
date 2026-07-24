@@ -208,8 +208,11 @@ if (!gotTheLock) {
 
     // --- NATIVE NOTES INFRASTRUCTURE ---
     let cachedNotesHash = {};
+    let isInternalSync = false;
+    let workspaceWatcher = null;
+    let watcherTimeout = null;
 
-    ipcMain.handle('load-workspace', () => {
+    function readWorkspaceData() {
       const workspaceJsonPath = path.join(currentWorkspace, 'workspace.json');
       if (!fs.existsSync(workspaceJsonPath)) return null;
 
@@ -227,9 +230,42 @@ if (!gotTheLock) {
       } catch (err) {
         return null;
       }
+    }
+
+    function initWorkspaceWatcher() {
+      if (workspaceWatcher) {
+        try { workspaceWatcher.close(); } catch (e) {}
+      }
+
+      const activeNotesDir = getNotesDir();
+      if (!fs.existsSync(activeNotesDir)) return;
+
+      try {
+        workspaceWatcher = fs.watch(activeNotesDir, { recursive: true }, (eventType, filename) => {
+          if (isInternalSync) return;
+
+          clearTimeout(watcherTimeout);
+          watcherTimeout = setTimeout(() => {
+            if (isInternalSync) return;
+            const updated = readWorkspaceData();
+            if (updated && mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('workspace-external-update', updated);
+            }
+          }, 300);
+        });
+      } catch (err) {
+        console.error("Failed to initialize workspace watcher:", err);
+      }
+    }
+
+    ipcMain.handle('load-workspace', () => {
+      const data = readWorkspaceData();
+      initWorkspaceWatcher();
+      return data;
     });
 
     ipcMain.handle('sync-workspace', (event, { notes, folders, activeNoteId }) => {
+      isInternalSync = true;
       const safeName = (name) => name.replace(/[^a-zA-Z0-9 -]/g, '').trim() || 'Untitled';
       const noteMeta = notes.map(n => ({ id: n.id, name: n.name, folderId: n.folderId }));
       fs.writeFileSync(path.join(currentWorkspace, 'workspace.json'), JSON.stringify({ folders, activeNoteId, noteMeta }, null, 2));
@@ -256,6 +292,11 @@ if (!gotTheLock) {
           }
         });
       }
+
+      setTimeout(() => {
+        isInternalSync = false;
+      }, 500);
+
       return true;
     });
 

@@ -37,4 +37,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // --- NEW: WORKSPACE MANAGEMENT ---
     getWorkspace: () => ipcRenderer.invoke('get-workspace'),
     changeWorkspace: () => ipcRenderer.invoke('change-workspace'),
+    onWorkspaceExternalUpdate: (callback) => {
+        ipcRenderer.removeAllListeners('workspace-external-update');
+        ipcRenderer.on('workspace-external-update', (event, data) => callback(data));
+    },
 });

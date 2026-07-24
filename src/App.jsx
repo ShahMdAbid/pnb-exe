@@ -288,7 +288,18 @@ const SafeInject = ({ node, children, tagName, ...props }) => {
 
 const MarkdownComponents = {
     img: CustomImage,
-    a: (props) => <a {...props} className="styled-link" target="_blank" rel="noopener noreferrer" />,
+    a: (props) => {
+        if (props.href && props.href.startsWith('#')) {
+            return <a {...props} className={props.className || "styled-link"} onClick={(e) => {
+                e.preventDefault();
+                const target = document.getElementById(props.href.substring(1));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }} />;
+        }
+        return <a {...props} className={props.className || "styled-link"} target="_blank" rel="noopener noreferrer" />;
+    },
     hr: () => null,
     p: (props) => {
         const children = React.Children.toArray(props.children);
@@ -554,6 +565,23 @@ function App() {
         };
         loadAppData();
     }, []);
+
+    useEffect(() => {
+        if (window.electronAPI && window.electronAPI.onWorkspaceExternalUpdate) {
+            window.electronAPI.onWorkspaceExternalUpdate((updatedWorkspace) => {
+                if (updatedWorkspace && updatedWorkspace.notes) {
+                    setNotes([ABOUT_NOTE, ...updatedWorkspace.notes]);
+                    if (updatedWorkspace.folders) setFolders(updatedWorkspace.folders);
+
+                    const activeN = updatedWorkspace.notes.find(n => n.id === activeNoteId);
+                    if (activeN && activeN.content !== editorTextRef.current) {
+                        editorTextRef.current = activeN.content;
+                        setLastTypeTime(Date.now());
+                    }
+                }
+            });
+        }
+    }, [activeNoteId]);
 
     useEffect(() => {
         // Migration Script: Runs once to convert custom syntax to HTML
@@ -1626,6 +1654,9 @@ function App() {
         }).format(new Date());
         c = c.replace(/\[today\]/g, todayStr);
 
+        // Page Breaks
+        c = c.replace(/^\s*\*\*\*\s*$/gm, '<div class="manual-page-break"></div>');
+
         const explanations = new Map();
         let footnoteCounter = 1;
 
@@ -1635,7 +1666,7 @@ function App() {
             explanations.set(id, { word, desc, counter: footnoteCounter });
             footnoteCounter++;
             
-            return `<a href="#${id}" class="keyword-ref">${word}</a>`;
+            return `<a href="#${id}" id="ref_${id}" class="keyword-ref">${word}</a>`;
         });
 
         // 2. Append the Explanations to the bottom of the document
@@ -1644,7 +1675,7 @@ function App() {
             explanations.forEach((data, id) => {
                 appendix += `\n<div id="${id}" class="explanation">`;
                 appendix += `\n\n**${data.word}**\n\n${data.desc}\n\n`;
-                appendix += `<a href="#" class="back-link">&larr; Back to top</a>`;
+                appendix += `<a href="#ref_${id}" class="back-link">&larr; Back to top</a>`;
                 appendix += `\n</div>`;
             });
             appendix += '\n</div>';
@@ -2482,6 +2513,7 @@ function App() {
                         {/* Footer */}
                         <div className="settings-footer">
                             <div className="settings-footer-left">
+                                {/* AI Features Deprecated 
                                 <a
                                     href="#"
                                     className="btn-get-api"
@@ -2501,8 +2533,8 @@ function App() {
                                     <ExternalLink size={14} /> Get {aiProvider === 'gemini' ? 'Gemini' : 'Groq'} Key
                                 </a>
 
-                                {/* Visual divider */}
                                 <div style={{ width: '1px', height: '16px', background: 'var(--border-color)', margin: '0 8px' }} />
+                                */}
 
                                 <button
                                     className="btn-secondary"
