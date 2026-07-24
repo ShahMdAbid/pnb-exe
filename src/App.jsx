@@ -375,6 +375,7 @@ function App() {
     const [workspacePath, setWorkspacePath] = useState('Loading...');
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
     const [settingsTab, setSettingsTab] = useState('general');
+    const [customPandocPath, setCustomPandocPath] = useState(localStorage.getItem('customPandocPath') || '');
 
     // Add this near your other useState declarations
     const [explanationModal, setExplanationModal] = useState({ isOpen: false, keyword: '', text: '' });
@@ -2172,7 +2173,8 @@ function App() {
                                                     showToast("Generating .docx...");
                                                     const result = await window.electronAPI.exportToDocx({
                                                         markdown: activeNote.content,
-                                                        title: activeNote.name
+                                                        title: activeNote.name,
+                                                        customPandocPath: customPandocPath.trim()
                                                     });
                                                     if (result.success) showToast("Export Successful!");
                                                 } catch (err) { alert(err.error); }
@@ -2186,7 +2188,8 @@ function App() {
                                                     showToast("Login to Google Drive... Check Browser!");
                                                     const result = await window.electronAPI.exportToGdocs({
                                                         markdown: activeNote.content,
-                                                        title: activeNote.name
+                                                        title: activeNote.name,
+                                                        customPandocPath: customPandocPath.trim()
                                                     });
                                                     if (result.success) {
                                                         showToast("Successfully Uploaded to Google Docs!");
@@ -2282,6 +2285,23 @@ function App() {
                                         >
                                             Change Folder
                                         </button>
+                                    </div>
+                                    <div className="settings-row" style={{ borderBottom: 'none' }}>
+                                        <div className="settings-row-info">
+                                            <span className="settings-row-title">Custom Pandoc Path</span>
+                                            <span className="settings-row-desc">If export fails on Linux/Mac, paste the absolute path to pandoc here.</span>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            className="settings-input"
+                                            value={customPandocPath}
+                                            onChange={(e) => {
+                                                setCustomPandocPath(e.target.value);
+                                                localStorage.setItem('customPandocPath', e.target.value);
+                                            }}
+                                            placeholder="e.g. /usr/local/bin/pandoc"
+                                            style={{ width: '250px', padding: '6px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-editor)', color: 'var(--text-main)' }}
+                                        />
                                     </div>
                                 </div>
                             </div>

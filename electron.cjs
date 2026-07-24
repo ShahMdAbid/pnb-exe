@@ -7,7 +7,9 @@ const { pathToFileURL } = require('url');
 const { exec } = require('child_process');
 
 // Helper to reliably find Pandoc, especially on Windows where PATH might not inherit correctly
-const getPandocPath = () => {
+const getPandocPath = (customPath) => {
+  if (customPath && fs.existsSync(customPath)) return `"${customPath}"`;
+  
   const isWin = process.platform === 'win32';
   const commonPaths = [
     ...(isWin ? [
@@ -326,7 +328,7 @@ if (!gotTheLock) {
     });
 
     // --- GOOGLE DOCS EXPORT PIPELINE (PANDOC ENGINE) ---
-    ipcMain.handle('export-to-docx', async (event, { markdown, title }) => {
+    ipcMain.handle('export-to-docx', async (event, { markdown, title, customPandocPath }) => {
       return new Promise((resolve, reject) => {
         try {
           const tempDir = app.getPath('temp');
@@ -418,7 +420,7 @@ if (!gotTheLock) {
           if (footnotes.length > 0) processedMd += '\n\n' + footnotes.join('\n');
 
           fs.writeFileSync(mdPath, processedMd, 'utf8');
-          const command = `${getPandocPath()} "${mdPath}" -f markdown -t docx -o "${docxPath}"`;
+          const command = `${getPandocPath(customPandocPath)} "${mdPath}" -f markdown -t docx -o "${docxPath}"`;
 
           exec(command, (error) => {
             if (error) {
@@ -433,7 +435,7 @@ if (!gotTheLock) {
       });
     });
 
-    ipcMain.handle('export-to-gdocs', async (event, { markdown, title }) => {
+    ipcMain.handle('export-to-gdocs', async (event, { markdown, title, customPandocPath }) => {
       // First, generate the docx in a temp directory using existing logic
       const tempDir = app.getPath('temp');
       const safeTitle = title.replace(/[^a-zA-Z0-9 -]/g, '').trim() || 'Document';
@@ -507,7 +509,7 @@ if (!gotTheLock) {
             });
             if (footnotes.length > 0) processedMd += '\n\n' + footnotes.join('\n');
             fs.writeFileSync(mdPath, processedMd, 'utf8');
-            exec(`${getPandocPath()} "${mdPath}" -f markdown -t docx -o "${docxPath}"`, (error) => {
+            exec(`${getPandocPath(customPandocPath)} "${mdPath}" -f markdown -t docx -o "${docxPath}"`, (error) => {
               if (error) reject(new Error('Pandoc is not installed or not found in PATH. Please install Pandoc from pandoc.org and restart your computer.'));
               else resolve();
             });
