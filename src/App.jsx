@@ -2062,12 +2062,10 @@ function App() {
                                     title={
                                         !isAutoNoteEnabled
                                             ? "Auto-Note: OFF"
-                                            : isAiClipboardEnabled
-                                                ? "Auto-Note: ON (AI Format Fixer Active)"
-                                                : "Auto-Note: ON (Standard)"
+                                            : "Auto-Note: ON"
                                     }
                                     style={{
-                                        background: isAutoNoteEnabled && isAiClipboardEnabled ? '#8b5cf6' : (isAutoNoteEnabled ? '#10b981' : 'transparent'),
+                                        background: isAutoNoteEnabled ? '#10b981' : 'transparent',
                                         color: isAutoNoteEnabled ? 'white' : 'var(--text-main)',
                                         border: isAutoNoteEnabled ? 'none' : '1px solid var(--border-color)',
                                         width: '34px',
@@ -2078,19 +2076,21 @@ function App() {
                                         alignItems: 'center',
                                         justifyContent: 'center',
                                         transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                        boxShadow: isAutoNoteEnabled && isAiClipboardEnabled ? '0 0 10px rgba(139, 92, 246, 0.5)' : 'none',
+                                        boxShadow: 'none',
                                         flexShrink: 0
                                     }}
                                 >
                                     <ClipboardCheck size={18} />
                                 </button>
                                 {/* Undo button removed as requested */}
+                                {/* AI Features Deprecated 
                                 <button className="btn-custom-refine" onClick={() => setIsCustomRefineOpen(true)} disabled={isRefining || !activeNote} title="Custom Refine">
                                     <Wand2 size={14} />
                                 </button>
                                 <button className={`btn-magic ${isRefining ? 'loading' : ''}`} onClick={handleMagicRefine} disabled={isRefining || !activeNote} title="Enhance Syntax">
                                     {isRefining ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}
                                 </button>
+                                */}
                             </div>
                         </div>
 
@@ -2212,7 +2212,9 @@ function App() {
                                 </div>
                                 <div className="settings-tabs">
                                     <button className={`settings-tab ${settingsTab === 'general' ? 'active' : ''}`} onClick={() => setSettingsTab('general')}>General</button>
+                                    {/* AI Features Deprecated 
                                     <button className={`settings-tab ${settingsTab === 'ai' ? 'active' : ''}`} onClick={() => setSettingsTab('ai')}>AI Provider</button>
+                                    */}
                                     <button className={`settings-tab ${settingsTab === 'appearance' ? 'active' : ''}`} onClick={() => setSettingsTab('appearance')}>Appearance</button>
                                 </div>
                             </div>
@@ -2253,7 +2255,7 @@ function App() {
                                 </div>
                             </div>
 
-                            {/* Section: Workflow & AI */}
+                            {/* AI Features Deprecated 
                             <div className="settings-group">
                                 <span className="settings-label-main">Workflow & AI</span>
                                 <div className="settings-card">
@@ -2271,12 +2273,13 @@ function App() {
                                     </div>
                                 </div>
                             </div>
+                            */}
                                 </>
                             )}
 
+                            {/* AI Features Deprecated 
                             {settingsTab === 'ai' && (
                                 <>
-                            {/* Section: AI Provider */}
                             <div className="settings-group">
                                 <span className="settings-label-main">AI Provider Settings</span>
                                 <div className="settings-card">
@@ -2399,6 +2402,7 @@ function App() {
 
                                 </>
                             )}
+                            */}
 
                             {settingsTab === 'appearance' && (
                                 <>
@@ -2544,6 +2548,7 @@ function App() {
                 )
             }
 
+            {/* AI Features Deprecated 
             {isCustomRefineOpen && (
                 <div className="modal-overlay" onClick={() => setIsCustomRefineOpen(false)}>
                     <div className="modal-content custom-refine-modal" onClick={e => e.stopPropagation()}>
@@ -2600,6 +2605,7 @@ function App() {
                     </div>
                 </div>
             )}
+            */}
 
             {promptState.isOpen && (
                 <div className="modal-overlay">
