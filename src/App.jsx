@@ -591,7 +591,7 @@ function App() {
                 });
 
                 // 5. Page Breaks & Spaces
-                text = text.replace(/^\s*\*\*\*\s*$/gm, '<div style="page-break-before: always;"></div>');
+                text = text.replace(/^\s*\*\*\*\s*$/gm, '<div class="manual-page-break"></div>');
                 text = text.replace(/^\s*\/\/(\d+)\s*$/gm, (match, p1) => '<br>'.repeat(parseInt(p1, 10)));
 
                 // 6. Interactive Footnotes -> Standard Markdown Footnotes
@@ -709,6 +709,7 @@ function App() {
     const [isCustomRefineOpen, setIsCustomRefineOpen] = useState(false);
     const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
     const [isColorMenuOpen, setIsColorMenuOpen] = useState(false);
+    const [isTitleMenuOpen, setIsTitleMenuOpen] = useState(false);
 
     // --- AUTO NOTE STATE ---
     const [isAutoNoteEnabled, setIsAutoNoteEnabled] = useState(false);
@@ -1811,7 +1812,36 @@ function App() {
                 {(viewMode === 'split' || viewMode === 'editor' || viewMode === 'live') && (
                     <section className="editor-pane" style={(viewMode === 'editor' || viewMode === 'live') ? { borderRight: 'none' } : {}}>
                         <div className="editor-info-bar">
-                            <span>{activeNote?.name || 'No Note Selected'}</span>
+                            <div className="title-dropdown-container" style={{ position: 'relative' }}>
+                                <button
+                                    className={`btn-insert ${isTitleMenuOpen ? 'active' : ''}`}
+                                    onClick={() => setIsTitleMenuOpen(!isTitleMenuOpen)}
+                                    disabled={!activeNote}
+                                    style={{ background: 'transparent', border: 'none', fontSize: '1rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', color: 'var(--text-main)' }}
+                                >
+                                    <span>{activeNote?.name || 'No Note Selected'}</span>
+                                    {activeNote && <ChevronDown size={14} className={`arrow ${isTitleMenuOpen ? 'up' : ''}`} />}
+                                </button>
+
+                                {isTitleMenuOpen && activeNote && (
+                                    <div className="insert-menu" style={{ left: 0, right: 'auto', minWidth: '150px' }}>
+                                        <div className="insert-option" onClick={() => { renameNote(activeNote.id); setIsTitleMenuOpen(false); }}>
+                                            <Edit3 size={14} />
+                                            <span>Rename</span>
+                                        </div>
+                                        <div className="insert-option" onClick={() => {
+                                            const safeName = (name) => name.replace(/[^a-zA-Z0-9 -]/g, '').trim() || 'Untitled';
+                                            const notePath = `${workspacePath}\\notes\\${safeName(activeNote.name)}_${activeNote.id}.md`;
+                                            navigator.clipboard.writeText(notePath);
+                                            showToast("Path copied to clipboard!");
+                                            setIsTitleMenuOpen(false);
+                                        }}>
+                                            <ClipboardCheck size={14} />
+                                            <span>Copy Path</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                             {isRefining && <span className="refining-status"><Loader2 className="spin" size={14} /> Refining...</span>}
 
                             {isCoverPagePickerOpen && (
@@ -1908,7 +1938,7 @@ function App() {
 
                                         {isToolsMenuOpen && (
                                             <div className="insert-menu tools-menu">
-                                                <div className="insert-option" onClick={() => handleFormatting("", '\n<div style="page-break-before: always;"></div>\n')}>
+                                                <div className="insert-option" onClick={() => handleFormatting("", '\n<div class="manual-page-break"></div>\n')}>
                                                     <span>Page Break</span>
                                                 </div>
 
@@ -2076,6 +2106,32 @@ function App() {
                                     title="Export as Word Document"
                                 >
                                     <FileText size={14} /> Export .docx
+                                </button>
+
+                                <button
+                                    className="btn-export"
+                                    style={{ color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)', background: 'rgba(16, 185, 129, 0.05)' }}
+                                    onClick={async () => {
+                                        if (!window.electronAPI?.exportToGdocs) return;
+                                        try {
+                                            showToast("Login to Google Drive... Check Browser!");
+                                            const result = await window.electronAPI.exportToGdocs({
+                                                markdown: activeNote.content,
+                                                title: activeNote.name
+                                            });
+                                            if (result.success) {
+                                                showToast("Successfully Uploaded to Google Docs!");
+                                            } else {
+                                                throw new Error(result.error || "Unknown error");
+                                            }
+                                        } catch (err) {
+                                            alert("Google Docs Error: " + (err.message || err));
+                                        }
+                                    }}
+                                    disabled={!activeNote}
+                                    title="Export to Google Docs"
+                                >
+                                    <FileText size={14} /> G-Docs
                                 </button>
 
                                 <button className="btn-export" onClick={handleExportPoring} disabled={!activeNote} title="Export as .zip file">

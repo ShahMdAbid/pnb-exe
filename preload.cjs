@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     syncWorkspace: (data) => ipcRenderer.invoke('sync-workspace', data),
     openNotesFolder: () => ipcRenderer.send('open-notes-folder'),
     exportToDocx: (data) => ipcRenderer.invoke('export-to-docx', data),
+    exportToGdocs: (data) => ipcRenderer.invoke('export-to-gdocs', data),
 
     // --- NEW: WORKSPACE MANAGEMENT ---
     getWorkspace: () => ipcRenderer.invoke('get-workspace'),

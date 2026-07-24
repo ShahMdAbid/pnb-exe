@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, clipboard, shell, protocol, net } = require('electron');
 const { autoUpdater } = require('electron-updater');
+require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
@@ -271,7 +272,8 @@ if (!gotTheLock) {
           });
           processedMd = processedMd.replace(/\$([^$]+?)\$/g, (match, content) => {
             const placeholder = `%%INLINEMATH${mathBlocks.length}%%`;
-            mathBlocks.push({ placeholder, content: `$${content}$` });
+            // Trim to satisfy Pandoc's strict inline math rules (no spaces after opening $ or before closing $)
+            mathBlocks.push({ placeholder, content: `$${content.trim()}$` });
             return placeholder;
           });
 
@@ -336,7 +338,8 @@ if (!gotTheLock) {
           });
 
           mathBlocks.forEach(item => {
-            processedMd = processedMd.replace(item.placeholder, item.content);
+            // Use a function replacer to prevent '$$' in the math content from being evaluated as a single '$' by JS
+            processedMd = processedMd.replace(item.placeholder, () => item.content);
           });
           if (footnotes.length > 0) processedMd += '\n\n' + footnotes.join('\n');
 
@@ -348,14 +351,222 @@ if (!gotTheLock) {
               console.error("Pandoc Error:", error);
               return reject({ success: false, error: 'Pandoc failed: ' + error.message });
             }
-            // FIXED: Automatically opens the workspace folder so you clearly see the file
-            shell.showItemInFolder(docxPath);
             resolve({ success: true, docxPath: docxPath });
           });
         } catch (err) {
           reject({ success: false, error: err.message });
         }
       });
+    });
+
+    ipcMain.handle('export-to-gdocs', async (event, { markdown, title }) => {
+      // First, generate the docx in a temp directory using existing logic
+      const tempDir = app.getPath('temp');
+      const safeTitle = title.replace(/[^a-zA-Z0-9 -]/g, '').trim() || 'Document';
+      const docxPath = path.join(tempDir, `${safeTitle}_gdocs.docx`);
+
+      try {
+        // Re-use the docx generation logic but without showing in folder
+        await new Promise((resolve, reject) => {
+            // Very simplified copy of the above to just get a docx
+            const mdPath = path.join(tempDir, `${safeTitle}_gdocs.md`);
+            let processedMd = markdown;
+            const mathBlocks = [];
+            processedMd = processedMd.replace(/\$\$([\s\S]*?)\$\$/g, (match, content) => {
+              const placeholder = `%%BLOCKMATH${mathBlocks.length}%%`;
+              mathBlocks.push({ placeholder, content: `$$${content}$$` });
+              return placeholder;
+            });
+            processedMd = processedMd.replace(/\$([^$]+?)\$/g, (match, content) => {
+              const placeholder = `%%INLINEMATH${mathBlocks.length}%%`;
+              mathBlocks.push({ placeholder, content: `$${content.trim()}$` });
+              return placeholder;
+            });
+            processedMd = processedMd.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, altText, url) => {
+              if (url.startsWith('poring-asset://')) {
+                const filename = url.replace('poring-asset://', '');
+                let absPath = path.join(getAssetsDir(), filename);
+                if (!fs.existsSync(absPath)) absPath = path.join(userDataPath, 'assets', filename);
+                absPath = absPath.replace(/\\/g, '/');
+                let widthStr = "";
+                if (altText.includes('|')) {
+                  const parts = altText.split('|');
+                  const w = parts[1].trim();
+                  if (/^\d+$/.test(w)) widthStr = `{width=${w}px}`;
+                }
+                return `![](${absPath})${widthStr}`;
+              }
+              return match;
+            });
+            
+            // Strip wrappers
+            const tags = ['red', 'blue', 'green', 'orange', 'purple', 'gray', 'center', 'right', 'left'];
+            const regex = new RegExp(`\\b(?:${tags.join('|')})\\[`, 'g');
+            let match;
+            while ((match = regex.exec(processedMd)) !== null) {
+              const start = match.index;
+              const open = start + match[0].length - 1;
+              let depth = 1; let j = open + 1;
+              while (j < processedMd.length && depth > 0) {
+                if (processedMd[j] === '[') depth++;
+                else if (processedMd[j] === ']') depth--;
+                j++;
+              }
+              if (depth === 0) {
+                const end = j - 1;
+                const innerContent = processedMd.substring(open + 1, end);
+                processedMd = processedMd.substring(0, start) + innerContent + processedMd.substring(j);
+                regex.lastIndex = 0;
+              } else { regex.lastIndex = open + 1; }
+            }
+            
+            processedMd = processedMd.replace(/^\s*\/\/(\d+)\s*$/gm, (m) => '\n'.repeat(parseInt(m.replace(/\//g, '').trim(), 10)));
+            processedMd = processedMd.replace(/^\s*\*\*\*\s*$/gm, '');
+            const footnotes = [];
+            processedMd = processedMd.replace(/\[\[(.+?)\]\]\(([\s\S]+?)\)/g, (m, word, desc) => {
+              const index = footnotes.length + 1;
+              footnotes.push(`[^${index}]: ${desc.trim()}`);
+              return `${word}[^${index}]`;
+            });
+            mathBlocks.forEach(item => {
+              processedMd = processedMd.replace(item.placeholder, () => item.content);
+            });
+            if (footnotes.length > 0) processedMd += '\n\n' + footnotes.join('\n');
+            fs.writeFileSync(mdPath, processedMd, 'utf8');
+            exec(`pandoc "${mdPath}" -f markdown -t docx -o "${docxPath}"`, (error) => {
+              if (error) reject(new Error('Pandoc failed: ' + error.message));
+              else resolve();
+            });
+        });
+
+        // OAUTH FLOW
+        const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+        const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+        const REDIRECT_URI = 'http://localhost:3000/oauth2callback';
+        const tokenPath = path.join(userDataPath, 'gdocs_tokens.json');
+
+        let tokens = null;
+        if (fs.existsSync(tokenPath)) {
+          try { tokens = JSON.parse(fs.readFileSync(tokenPath, 'utf8')); } catch(e){}
+        }
+
+        let isAuthenticated = false;
+        if (tokens && tokens.refresh_token) {
+          // Proactively refresh the token
+          const res = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              client_id: CLIENT_ID,
+              client_secret: CLIENT_SECRET,
+              refresh_token: tokens.refresh_token,
+              grant_type: 'refresh_token'
+            })
+          });
+          const data = await res.json();
+          if (data.access_token) {
+             tokens.access_token = data.access_token;
+             if (data.refresh_token) tokens.refresh_token = data.refresh_token;
+             fs.writeFileSync(tokenPath, JSON.stringify(tokens));
+             isAuthenticated = true;
+          }
+        }
+
+        if (!isAuthenticated) {
+          const express = require('express');
+          const authServer = express();
+          
+          if (global.gdocsServer) {
+            try { global.gdocsServer.close(); } catch(e){}
+          }
+          
+          let server;
+          const codePromise = new Promise((resolve, reject) => {
+            authServer.get('/oauth2callback', (req, res) => {
+              const code = req.query.code;
+              if (code) {
+                res.send('<html><body><h2>Authentication successful!</h2><p>You can close this tab and return to Poring Notebook.</p><script>window.close();</script></body></html>');
+                resolve(code);
+              } else {
+                res.send('<html><body><h2>Authentication failed!</h2><p>Please try again.</p></body></html>');
+                reject(new Error('No code received'));
+              }
+              if (server) {
+                server.close();
+                global.gdocsServer = null;
+              }
+            });
+          });
+
+          server = authServer.listen(3000, '127.0.0.1');
+          global.gdocsServer = server;
+
+          const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent('https://www.googleapis.com/auth/drive.file')}&access_type=offline&prompt=consent`;
+          shell.openExternal(authUrl);
+
+          // Wait for user to authenticate
+          const code = await codePromise;
+
+          // Exchange code for token
+          const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              code,
+              client_id: CLIENT_ID,
+              client_secret: CLIENT_SECRET,
+              redirect_uri: REDIRECT_URI,
+              grant_type: 'authorization_code'
+            })
+          });
+          tokens = await tokenRes.json();
+          
+          if (!tokens.access_token) {
+            throw new Error('Failed to get access token');
+          }
+          fs.writeFileSync(tokenPath, JSON.stringify(tokens));
+        }
+
+        // Upload to Google Drive using Multipart
+        const metadata = {
+          name: title,
+          mimeType: 'application/vnd.google-apps.document'
+        };
+        const boundary = '-------314159265358979323846';
+        const delimiter = "\r\n--" + boundary + "\r\n";
+        const close_delim = "\r\n--" + boundary + "--";
+
+        const fileContent = fs.readFileSync(docxPath);
+
+        const bodyPieces = [
+          Buffer.from(delimiter + 'Content-Type: application/json\r\n\r\n' + JSON.stringify(metadata) + '\r\n'),
+          Buffer.from(delimiter + 'Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n\r\n'),
+          fileContent,
+          Buffer.from(close_delim)
+        ];
+        const bodyBuffer = Buffer.concat(bodyPieces);
+
+        const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + tokens.access_token,
+            'Content-Type': 'multipart/related; boundary="' + boundary + '"'
+          },
+          body: bodyBuffer
+        });
+        const fileInfo = await uploadRes.json();
+        
+        if (fileInfo.id) {
+          shell.openExternal(`https://docs.google.com/document/d/${fileInfo.id}/edit`);
+          return { success: true };
+        } else {
+          throw new Error(JSON.stringify(fileInfo));
+        }
+
+      } catch (err) {
+        console.error("Google Docs Export Error:", err);
+        return { success: false, error: err.message };
+      }
     });
 
     createWindow();
