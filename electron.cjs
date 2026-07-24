@@ -454,6 +454,11 @@ if (!gotTheLock) {
         // OAUTH FLOW
         const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
         const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+
+        if (!CLIENT_ID || !CLIENT_SECRET) {
+            return { success: false, error: 'Google Client ID or Secret missing in .env file!' };
+        }
+
         const REDIRECT_URI = 'http://localhost:3000/oauth2callback';
         const tokenPath = path.join(userDataPath, 'gdocs_tokens.json');
 

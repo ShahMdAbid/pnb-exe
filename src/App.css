@@ -554,6 +554,7 @@ html,
   font-size: 0.85rem;
   color: var(--text-main);
   min-height: 54px;
+  gap: 12px;
 }
 
 .refining-status {
@@ -2806,3 +2807,15 @@ html,
 .pages-stack {
   zoom: var(--content-zoom, 1);
 }
+.empty-state-container { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; width: 100%; background: var(--bg-main); text-align: center; }
+
+
+.settings-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
+.settings-tab { background: transparent; color: var(--text-muted); border: none; padding: 6px 12px; cursor: pointer; border-radius: 6px; font-weight: 500; font-size: 0.9rem; transition: all 0.2s; }
+.settings-tab:hover { background: rgba(255,255,255,0.05); color: var(--text-main); }
+.settings-tab.active { background: var(--bg-editor); color: var(--text-main); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+
+.note-item, .folder-header { transition: transform 0.2s ease, background 0.2s ease; }
+.note-item:hover, .folder-header:hover { transform: translateX(4px); }
+

@@ -362,6 +362,8 @@ function App() {
     const [searchQuery, setSearchQuery] = useState('');
     const [drawModeState, setDrawModeState] = useState({ isOpen: false, editKey: null });
     const [workspacePath, setWorkspacePath] = useState('Loading...');
+    const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+    const [settingsTab, setSettingsTab] = useState('general');
 
     // Add this near your other useState declarations
     const [explanationModal, setExplanationModal] = useState({ isOpen: false, keyword: '', text: '' });
@@ -931,10 +933,16 @@ function App() {
                 setIsToolsMenuOpen(false);
                 setIsColorMenuOpen(false);
             }
+            if (isExportMenuOpen && !event.target.closest('.export-dropdown-container')) {
+                setIsExportMenuOpen(false);
+            }
+            if (isTitleMenuOpen && !event.target.closest('.title-dropdown-container')) {
+                setIsTitleMenuOpen(false);
+            }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [isInsertMenuOpen, isToolsMenuOpen]);
+    }, [isInsertMenuOpen, isToolsMenuOpen, isExportMenuOpen, isTitleMenuOpen]);
 
     const updateContent = (content) => {
         setNotes(prevNotes => prevNotes.map(n => n.id === activeNoteId ? { ...n, content } : n));
@@ -1281,6 +1289,23 @@ function App() {
     };
 
     // --- SYNC SCROLL LOGIC ---
+    // Reference for the search input to handle Ctrl+F
+    const searchInputRef = useRef(null);
+
+    // Global Keyboard Shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+                e.preventDefault();
+                if (searchInputRef.current) {
+                    searchInputRef.current.focus();
+                }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
     const handlePreviewClick = (e) => {
         // Fix Interaction Conflict: Prevent jump if user is selecting text
         if (window.getSelection().toString().length > 0) return;
@@ -1727,8 +1752,9 @@ function App() {
                         <div className="sidebar-search">
                             <Search size={14} className="search-icon" />
                             <input
+                                ref={searchInputRef}
                                 type="text"
-                                placeholder="Search notes..."
+                                placeholder="Search notes... (Ctrl+F)"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
@@ -1808,7 +1834,18 @@ function App() {
                     </div>
                 </aside>
 
-                {/* Editor Pane (Shows in Split, Editor, OR Live mode) */}
+                {!activeNote ? (
+                    <div className="empty-state-container">
+                        <FilePlus size={48} className="empty-state-icon" style={{ opacity: 0.5, marginBottom: '16px' }} />
+                        <h2>No Note Selected</h2>
+                        <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>Select a note from the sidebar or create a new one to get started.</p>
+                        <button className="btn-primary" onClick={() => createNote()} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '8px', background: 'var(--accent)', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
+                            <Plus size={16} /> Create Note
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        {/* Editor Pane (Shows in Split, Editor, OR Live mode) */}
                 {(viewMode === 'split' || viewMode === 'editor' || viewMode === 'live') && (
                     <section className="editor-pane" style={(viewMode === 'editor' || viewMode === 'live') ? { borderRight: 'none' } : {}}>
                         <div className="editor-info-bar">
@@ -1817,10 +1854,13 @@ function App() {
                                     className={`btn-insert ${isTitleMenuOpen ? 'active' : ''}`}
                                     onClick={() => setIsTitleMenuOpen(!isTitleMenuOpen)}
                                     disabled={!activeNote}
-                                    style={{ background: 'transparent', border: 'none', fontSize: '1rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', color: 'var(--text-main)' }}
+                                    title={activeNote?.name}
+                                    style={{ background: 'transparent', border: 'none', fontSize: '1rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', color: 'var(--text-main)', maxWidth: '100%', overflow: 'hidden' }}
                                 >
-                                    <span>{activeNote?.name || 'No Note Selected'}</span>
-                                    {activeNote && <ChevronDown size={14} className={`arrow ${isTitleMenuOpen ? 'up' : ''}`} />}
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px', display: 'inline-block' }}>
+                                        {activeNote?.name || 'No Note Selected'}
+                                    </span>
+                                    {activeNote && <ChevronDown size={14} style={{ flexShrink: 0 }} className={`arrow ${isTitleMenuOpen ? 'up' : ''}`} />}
                                 </button>
 
                                 {isTitleMenuOpen && activeNote && (
@@ -2083,61 +2123,57 @@ function App() {
                         <div className="preview-header">
                             <span>PDF Preview</span>
                             <div style={{ display: 'flex', gap: '8px' }}>
-                                {/* NEW GOOGLE DOCS PIPELINE BUTTON */}
-                                <button
-                                    className="btn-export"
-                                    style={{ color: '#3b82f6', borderColor: 'rgba(59, 130, 246, 0.3)', background: 'rgba(59, 130, 246, 0.05)' }}
-                                    onClick={async () => {
-                                        if (!window.electronAPI?.exportToDocx) return;
-                                        try {
-                                            showToast("Generating .docx...");
-                                            const result = await window.electronAPI.exportToDocx({
-                                                markdown: activeNote.content,
-                                                title: activeNote.name
-                                            });
-                                            if (result.success) {
-                                                showToast("Export Successful!");
-                                            }
-                                        } catch (err) {
-                                            alert(err.error);
-                                        }
-                                    }}
-                                    disabled={!activeNote}
-                                    title="Export as Word Document"
-                                >
-                                    <FileText size={14} /> Export .docx
-                                </button>
-
-                                <button
-                                    className="btn-export"
-                                    style={{ color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)', background: 'rgba(16, 185, 129, 0.05)' }}
-                                    onClick={async () => {
-                                        if (!window.electronAPI?.exportToGdocs) return;
-                                        try {
-                                            showToast("Login to Google Drive... Check Browser!");
-                                            const result = await window.electronAPI.exportToGdocs({
-                                                markdown: activeNote.content,
-                                                title: activeNote.name
-                                            });
-                                            if (result.success) {
-                                                showToast("Successfully Uploaded to Google Docs!");
-                                            } else {
-                                                throw new Error(result.error || "Unknown error");
-                                            }
-                                        } catch (err) {
-                                            alert("Google Docs Error: " + (err.message || err));
-                                        }
-                                    }}
-                                    disabled={!activeNote}
-                                    title="Export to Google Docs"
-                                >
-                                    <FileText size={14} /> G-Docs
-                                </button>
-
-                                <button className="btn-export" onClick={handleExportPoring} disabled={!activeNote} title="Export as .zip file">
-                                    <Download size={14} /> .zip
-                                </button>
-                                <button className="btn-export" onClick={handleDownloadPDF} disabled={!activeNote} title="Export as PDF">
+                                <div className="export-dropdown-container">
+                                    <button 
+                                        className="btn-export" 
+                                        onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} 
+                                        disabled={!activeNote}
+                                        title="More Export Options"
+                                    >
+                                        Export <ChevronDown size={14} />
+                                    </button>
+                                    {isExportMenuOpen && (
+                                        <div className="export-menu">
+                                            <div className="export-option" onClick={async () => {
+                                                setIsExportMenuOpen(false);
+                                                if (!window.electronAPI?.exportToDocx) return;
+                                                try {
+                                                    showToast("Generating .docx...");
+                                                    const result = await window.electronAPI.exportToDocx({
+                                                        markdown: activeNote.content,
+                                                        title: activeNote.name
+                                                    });
+                                                    if (result.success) showToast("Export Successful!");
+                                                } catch (err) { alert(err.error); }
+                                            }}>
+                                                <FileText size={14} color="#3b82f6" /> Word (.docx)
+                                            </div>
+                                            <div className="export-option" onClick={async () => {
+                                                setIsExportMenuOpen(false);
+                                                if (!window.electronAPI?.exportToGdocs) return;
+                                                try {
+                                                    showToast("Login to Google Drive... Check Browser!");
+                                                    const result = await window.electronAPI.exportToGdocs({
+                                                        markdown: activeNote.content,
+                                                        title: activeNote.name
+                                                    });
+                                                    if (result.success) {
+                                                        showToast("Successfully Uploaded to Google Docs!");
+                                                    } else { throw new Error(result.error || "Unknown error"); }
+                                                } catch (err) { alert("Google Docs Error: " + (err.message || err)); }
+                                            }}>
+                                                <Cloud size={14} color="#10b981" /> Google Docs
+                                            </div>
+                                            <div className="export-option" onClick={() => {
+                                                setIsExportMenuOpen(false);
+                                                handleExportPoring();
+                                            }}>
+                                                <Download size={14} color="#eab308" /> Archive (.zip)
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                <button className="btn-export" style={{ background: 'var(--accent)', color: 'white', borderColor: 'var(--accent)' }} onClick={handleDownloadPDF} disabled={!activeNote} title="Export as PDF">
                                     <Download size={14} /> PDF
                                 </button>
                             </div>
@@ -2159,6 +2195,8 @@ function App() {
                         </div>
                     </section>
                 )}
+                </>
+                )}
             </main>
 
             {isSettingsOpen && (
@@ -2167,13 +2205,24 @@ function App() {
 
                         {/* Header */}
                         <div className="settings-header">
-                            <h3>Preferences</h3>
-                            <X size={20} className="close-btn" style={{ cursor: 'pointer', opacity: 0.6 }} onClick={() => setIsSettingsOpen(false)} />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <h3>Preferences</h3>
+                                    <X size={20} className="close-btn" style={{ cursor: 'pointer', opacity: 0.6 }} onClick={() => setIsSettingsOpen(false)} />
+                                </div>
+                                <div className="settings-tabs">
+                                    <button className={`settings-tab ${settingsTab === 'general' ? 'active' : ''}`} onClick={() => setSettingsTab('general')}>General</button>
+                                    <button className={`settings-tab ${settingsTab === 'ai' ? 'active' : ''}`} onClick={() => setSettingsTab('ai')}>AI Provider</button>
+                                    <button className={`settings-tab ${settingsTab === 'appearance' ? 'active' : ''}`} onClick={() => setSettingsTab('appearance')}>Appearance</button>
+                                </div>
+                            </div>
                         </div>
 
                         {/* Body */}
                         <div className="settings-body">
-                            {/* --- NEW SECTION: Storage & Workspace --- */}
+                            {settingsTab === 'general' && (
+                                <>
+                                    {/* --- NEW SECTION: Storage & Workspace --- */}
                             <div className="settings-group">
                                 <span className="settings-label-main">Storage & Sync</span>
                                 <div className="settings-card">
@@ -2204,6 +2253,29 @@ function App() {
                                 </div>
                             </div>
 
+                            {/* Section: Workflow & AI */}
+                            <div className="settings-group">
+                                <span className="settings-label-main">Workflow & AI</span>
+                                <div className="settings-card">
+                                    <div className="settings-row">
+                                        <div className="settings-row-info">
+                                            <span className="settings-row-title">Enable AI Format Fixer</span>
+                                            <span className="settings-row-desc">Automatically cleans up formatting when you paste text.</span>
+                                        </div>
+                                        <div
+                                            className={`elite-toggle ${isAiClipboardEnabled ? 'active' : ''}`}
+                                            onClick={toggleAiClipboard}
+                                        >
+                                            <div className="elite-toggle-thumb" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                                </>
+                            )}
+
+                            {settingsTab === 'ai' && (
+                                <>
                             {/* Section: AI Provider */}
                             <div className="settings-group">
                                 <span className="settings-label-main">AI Provider Settings</span>
@@ -2325,25 +2397,11 @@ function App() {
                                 </div>
                             </div>
 
-                            {/* Section: Workflow & AI */}
-                            <div className="settings-group">
-                                <span className="settings-label-main">Workflow & AI</span>
-                                <div className="settings-card">
-                                    <div className="settings-row">
-                                        <div className="settings-row-info">
-                                            <span className="settings-row-title">Enable AI Format Fixer</span>
-                                            <span className="settings-row-desc">Automatically cleans up formatting when you paste text.</span>
-                                        </div>
-                                        <div
-                                            className={`elite-toggle ${isAiClipboardEnabled ? 'active' : ''}`}
-                                            onClick={toggleAiClipboard}
-                                        >
-                                            <div className="elite-toggle-thumb" />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                                </>
+                            )}
 
+                            {settingsTab === 'appearance' && (
+                                <>
                             {/* Section: Editor & Media */}
                             <div className="settings-group">
                                 <span className="settings-label-main">Editor & Media</span>
@@ -2412,6 +2470,9 @@ function App() {
                                 </div>
                             </div>
 
+
+                                </>
+                            )}
                         </div>
 
                         {/* Footer */}
