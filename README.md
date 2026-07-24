@@ -24,12 +24,13 @@ In-app AI API setups often create friction for new users and clutter the interfa
   - Go to the [Pandoc Releases Page](https://github.com/jgm/pandoc/releases/latest).
   - Download and install the **Windows Installer (`.msi`)** (e.g., `pandoc-3.x-windows-x86_64.msi`).
 4. Open **Poring Notebook** from your Desktop or Start Menu.
+5. Try exporting a note to `.docx`. If it exports successfully, you're all set! If it fails, open **Settings** (⚙️) ➔ **General** and paste your custom Pandoc path into the **Custom Pandoc Path** field.
 
 ---
 
 ### 2. ⚙️ Workspace Setup (Optional)
 By default, Poring Notebook creates a local notes directory. 
-- Click the **Gear Icon** ⚙️ (bottom left) to open **Preferences**.
+- Click the **Gear Icon** ⚙️ (upper right) to open **Preferences**.
 - Change your **Workspace Folder** to any custom directory on your hard drive. All your `.md` files and images will be stored locally .
 
 ---
