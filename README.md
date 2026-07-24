@@ -30,7 +30,7 @@ In-app AI API setups often create friction for new users and clutter the interfa
 ### 2. ⚙️ Workspace Setup (Optional)
 By default, Poring Notebook creates a local notes directory. 
 - Click the **Gear Icon** ⚙️ (bottom left) to open **Preferences**.
-- Change your **Workspace Folder** to any custom directory on your hard drive. All your `.md` files and images will be stored locally with zero vendor lock-in.
+- Change your **Workspace Folder** to any custom directory on your hard drive. All your `.md` files and images will be stored locally .
 
 ---
 
@@ -56,7 +56,7 @@ By default, Poring Notebook creates a local notes directory.
 ### 5. 🖼️ Images, Drawing Canvas & Cover Pages
 - **Paste / Insert Images**: Paste images directly from your clipboard or use the toolbar insert button. Images are saved locally using native protocols:
   ```markdown
-  ![img | Caption| 350](poring-asset://img_xxxxxxxx.png)
+  ![img | 350| caption ](poring-asset://img_xxxxxxxx.png)
   ```
   *(Default image widths can be customized inside Settings).*
 - **Interactive Drawing Canvas**: Click **`+ Insert`** -> **`Drawing`** to open the built-in sketchpad. Sketch figures, equations, or diagrams and save them straight into your note.
@@ -95,7 +95,6 @@ Syntax: [[keyword]](explanation text)
 
 Example: [[Begula]](A car.)
 ```
-Hovering or clicking on the keyword in preview mode will display the popup explanation.
 
 ---
 
