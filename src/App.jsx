@@ -2289,7 +2289,7 @@ function App() {
                                     <div className="settings-row" style={{ borderBottom: 'none' }}>
                                         <div className="settings-row-info">
                                             <span className="settings-row-title">Custom Pandoc Path</span>
-                                            <span className="settings-row-desc">If export fails on Linux/Mac, paste the absolute path to pandoc here.</span>
+                                            <span className="settings-row-desc">If export fails, paste the absolute path to pandoc here.</span>
                                         </div>
                                         <input
                                             type="text"

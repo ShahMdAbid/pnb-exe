@@ -19,7 +19,7 @@ In-app AI API setups often create friction for new users and clutter the interfa
 
 ### 1. 🚀 Download & Installation
 1. Click the **[Download Poring Notebook (.exe)](https://github.com/ShahMdAbid/pnb-exe/releases/latest)** button above.
-2. Run the downloaded installer file (`Poring-Notebook-Setup-1.2.2.exe`).
+2. Run the downloaded installer file (`Poring-Notebook-Setup-1.3.1.exe`).
 3. To export notes containing math equations properly into `.docx` or Google Docs format, you **must install Pandoc**.
   - Go to the [Pandoc Releases Page](https://github.com/jgm/pandoc/releases/latest).
   - Download and install the **Windows Installer (`.msi`)** (e.g., `pandoc-3.x-windows-x86_64.msi`).
