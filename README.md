@@ -1,6 +1,7 @@
 # Poring Notebook
 
-> A modern, distraction-free desktop notebook designed for STEM, Academic, and KaTeX math note-taking with seamless Google Docs / MS Word export pipelines.
+> **Writing math in Google Docs or Word is tedious — clicking through menus for every symbol. Overleaf has a steep learning curve and AI support is hidden under paywall.**  
+> Poring Notebook bridges the gap — write math with simple KaTeX syntax, see it rendered instantly, and export directly to `.docx` or Google Docs with one click. A modern, distraction-free desktop notebook built for STEM students and academics.
 
 [![Download Latest Release](https://img.shields.io/github/v/release/ShahMdAbid/pnb-exe?label=Download%20Poring%20Notebook%20(.exe)&style=for-the-badge&color=2563eb)](https://github.com/ShahMdAbid/pnb-exe/releases/latest)
 
