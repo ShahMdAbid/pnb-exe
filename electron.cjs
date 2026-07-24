@@ -117,7 +117,7 @@ if (!gotTheLock) {
 
     ipcMain.handle('get-workspace', () => currentWorkspace);
 
-    // FIXED: The Migration Engine that actually moves your files!
+    // FIXED: Smart Workspace Switcher - never overwrites existing notes!
     ipcMain.handle('change-workspace', async () => {
       const result = await dialog.showOpenDialog(mainWindow, {
         title: 'Select Workspace Folder',
@@ -128,34 +128,46 @@ if (!gotTheLock) {
 
       const newWorkspace = result.filePaths[0];
 
-      // Don't do anything if they picked the exact same folder
-      if (newWorkspace === currentWorkspace) return currentWorkspace;
+      // Even if same folder, persist the preference so it survives updates
+      if (newWorkspace === currentWorkspace) {
+        fs.writeFileSync(prefsPath, JSON.stringify({ workspacePath: currentWorkspace }));
+        return currentWorkspace;
+      }
 
       const newAssetsDir = path.join(newWorkspace, 'assets');
       const newNotesDir = path.join(newWorkspace, 'notes');
+      const newWorkspaceJson = path.join(newWorkspace, 'workspace.json');
 
       if (!fs.existsSync(newAssetsDir)) fs.mkdirSync(newAssetsDir, { recursive: true });
       if (!fs.existsSync(newNotesDir)) fs.mkdirSync(newNotesDir, { recursive: true });
 
-      // MIGRATION: Copy existing notes and images to the new Google Drive folder
-      try {
-        if (fs.existsSync(getAssetsDir())) {
-          fs.cpSync(getAssetsDir(), newAssetsDir, { recursive: true });
+      // SMART MIGRATION: Only copy files if the target is a FRESH folder (no existing workspace.json).
+      // If the target already has a workspace.json, it means the user is switching BACK to an
+      // existing workspace — we must NOT overwrite their notes!
+      const targetIsExistingWorkspace = fs.existsSync(newWorkspaceJson);
+
+      if (!targetIsExistingWorkspace) {
+        // Fresh folder — migrate current notes there
+        try {
+          if (fs.existsSync(getAssetsDir())) {
+            fs.cpSync(getAssetsDir(), newAssetsDir, { recursive: true });
+          }
+          if (fs.existsSync(getNotesDir())) {
+            fs.cpSync(getNotesDir(), newNotesDir, { recursive: true });
+          }
+          const oldWorkspaceJson = path.join(currentWorkspace, 'workspace.json');
+          if (fs.existsSync(oldWorkspaceJson)) {
+            fs.copyFileSync(oldWorkspaceJson, newWorkspaceJson);
+          }
+        } catch (e) {
+          console.error("Failed to copy files during migration:", e);
         }
-        if (fs.existsSync(getNotesDir())) {
-          fs.cpSync(getNotesDir(), newNotesDir, { recursive: true });
-        }
-        const oldWorkspaceJson = path.join(currentWorkspace, 'workspace.json');
-        if (fs.existsSync(oldWorkspaceJson)) {
-          fs.copyFileSync(oldWorkspaceJson, path.join(newWorkspace, 'workspace.json'));
-        }
-      } catch (e) {
-        console.error("Failed to copy files during migration:", e);
       }
 
       // Update to new workspace
       currentWorkspace = newWorkspace;
       fs.writeFileSync(prefsPath, JSON.stringify({ workspacePath: currentWorkspace }));
+      cachedNotesHash = {}; // Reset cache so notes reload fresh
       initDirs();
 
       return currentWorkspace;
