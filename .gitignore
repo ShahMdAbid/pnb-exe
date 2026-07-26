@@ -4,3 +4,5 @@ dist-electron
 .env
 .env.local
 .DS_Store
+
+bin/pandoc.exe

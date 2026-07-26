@@ -3,9 +3,17 @@ import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { EditorView, Decoration, ViewPlugin, WidgetType } from '@codemirror/view';
-import { RangeSetBuilder } from '@codemirror/state';
+import { RangeSetBuilder, StateField } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 import katex from 'katex';
+import { createRoot } from 'react-dom/client';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { Table } from '@lezer/markdown';
 import localforage from 'localforage';
 
 import SustLogo from '../assets/sust_logo.png';
@@ -19,11 +27,11 @@ class ImageWidget extends WidgetType {
     // 🛡️ Ensure CodeMirror caches this DOM node
     eq(other) { return this.source === other.source && this.altText === other.altText; }
     ignoreEvent() { return false; }
-    toDOM() {
+    toDOM(view) {
         const parts = this.altText ? this.altText.split('|') : ["Image"];
         const width = parts[1] || '300';
         const wrapper = document.createElement("span");
-        wrapper.style.display = "inline-block";
+        wrapper.style.display = "block";
         wrapper.style.width = "100%";
         wrapper.style.textAlign = "center";
         wrapper.style.padding = "10px 0";
@@ -31,6 +39,13 @@ class ImageWidget extends WidgetType {
         img.style.maxWidth = "100%";
         img.style.width = `${width}px`;
         img.style.borderRadius = "4px";
+        
+        if (view) {
+            const observer = new ResizeObserver(() => view.requestMeasure());
+            observer.observe(wrapper);
+            wrapper._observer = observer;
+        }
+
         if (this.source.startsWith('poring-asset://')) {
             img.src = this.source;
         } else if (this.source.startsWith('poring_img_')) {
@@ -42,6 +57,9 @@ class ImageWidget extends WidgetType {
         }
         wrapper.appendChild(img);
         return wrapper;
+    }
+    destroy(dom) {
+        if (dom._observer) dom._observer.disconnect();
     }
 }
 
@@ -85,6 +103,65 @@ class PageBreakWidget extends WidgetType {
     }
 }
 
+class TableWidget extends WidgetType {
+    constructor(markdown) {
+        super();
+        this.markdown = markdown;
+    }
+    eq(other) {
+        return this.markdown === other.markdown;
+    }
+    ignoreEvent() { return false; }
+    toDOM(view) {
+        const container = document.createElement("div");
+        container.className = "cm-table-widget markdown-body";
+        container.style.marginTop = "10px";
+        container.style.marginBottom = "10px";
+        
+        const root = createRoot(container);
+        if (view) {
+            const observer = new ResizeObserver(() => view.requestMeasure());
+            observer.observe(container);
+            container._observer = observer;
+            container._reactRoot = root;
+        }
+
+        root.render(
+            <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[rehypeKatex]}
+                components={{
+                    code({node, inline, className, children, ...props}) {
+                        const match = /language-(\w+)/.exec(className || '');
+                        const isDark = document.querySelector('.app-container')?.classList.contains('dark-theme') ?? true;
+                        return !inline && match ? (
+                            <SyntaxHighlighter
+                                {...props}
+                                children={String(children).replace(/\n$/, '')}
+                                style={isDark ? vscDarkPlus : vs}
+                                language={match[1]}
+                                PreTag="div"
+                                className="custom-syntax-highlighter"
+                            />
+                        ) : (
+                            <code {...props} className={className}>
+                                {children}
+                            </code>
+                        );
+                    }
+                }}
+            >
+                {this.markdown}
+            </ReactMarkdown>
+        );
+        return container;
+    }
+    destroy(dom) {
+        if (dom._observer) dom._observer.disconnect();
+        if (dom._reactRoot) dom._reactRoot.unmount();
+    }
+}
+
 class MathWidget extends WidgetType {
     constructor(math, isBlock) {
         super();
@@ -94,21 +171,25 @@ class MathWidget extends WidgetType {
     // 🛡️ Ensure CodeMirror correctly caches Math blocks
     eq(other) { return this.math === other.math && this.isBlock === other.isBlock; }
     ignoreEvent() { return false; }
-    toDOM() {
+    toDOM(view) {
         const container = document.createElement("span");
         if (this.isBlock) {
             container.className = "math-center-wrapper";
-            container.style.display = "inline-block";
+            container.style.display = "block"; // Changed to block for stability
             container.style.width = "100%";
             container.style.textAlign = "center";
             container.style.cursor = "text";
             container.style.padding = "10px 0";
-            container.title = "Click to edit formula";
+            
+            if (view) {
+                const observer = new ResizeObserver(() => view.requestMeasure());
+                observer.observe(container);
+                container._observer = observer;
+            }
         } else {
-            container.style.cursor = "text";
+            container.className = "math-inline-wrapper";
             container.style.display = "inline-block";
         }
-
         try {
             // KaTeX can throw if syntax is completely invalid, we catch it gracefully
             katex.render(this.math, container, { displayMode: this.isBlock, throwOnError: false, strict: false });
@@ -117,6 +198,9 @@ class MathWidget extends WidgetType {
             container.style.color = "red";
         }
         return container;
+    }
+    destroy(dom) {
+        if (dom._observer) dom._observer.disconnect();
     }
 }
 
@@ -176,7 +260,12 @@ const livePreviewPlugin = ViewPlugin.fromClass(class {
                 const end = start + match[0].length;
                 mathRanges.push({ from: start, to: end });
                 if (!(selFrom <= end && selTo >= start)) {
-                    decos.push({ from: start, to: end, deco: Decoration.replace({ widget: new MathWidget(match[1], true) }) });
+                    const fromLine = view.state.doc.lineAt(start);
+                    const toLine = view.state.doc.lineAt(end);
+                    if (fromLine.number === toLine.number) {
+                        // ONLY decorate if it's on a single line. Multi-line replace from a ViewPlugin is forbidden.
+                        decos.push({ from: start, to: end, deco: Decoration.replace({ widget: new MathWidget(match[1], true) }) });
+                    }
                 }
             }
 
@@ -388,6 +477,68 @@ const livePreviewPlugin = ViewPlugin.fromClass(class {
     }
 }, { decorations: v => v.decorations });
 
+// 🛡️ StateField handles multi-line replacements (block widgets) safely across the whole document
+const liveBlockStateField = StateField.define({
+    create(state) { return buildBlockDecorations(state); },
+    update(decorations, tr) {
+        if (tr.docChanged || tr.selection) return buildBlockDecorations(tr.state);
+        return decorations;
+    },
+    provide: f => EditorView.decorations.from(f)
+});
+
+function buildBlockDecorations(state) {
+    try {
+        const builder = new RangeSetBuilder();
+        const selFrom = state.selection.main.from;
+        const selTo = state.selection.main.to;
+        const text = state.doc.toString();
+        const decos = [];
+
+        const blockMathRegex = /\$\$([\s\S]*?)\$\$/g;
+        let match;
+        while ((match = blockMathRegex.exec(text)) !== null) {
+            const start = match.index;
+            const end = start + match[0].length;
+            if (!(selFrom <= end && selTo >= start)) {
+                const fromLine = state.doc.lineAt(start);
+                const toLine = state.doc.lineAt(end);
+                if (fromLine.number !== toLine.number) {
+                    decos.push({
+                        from: start,
+                        to: end,
+                        deco: Decoration.replace({ widget: new MathWidget(match[1], true), block: true })
+                    });
+                }
+            }
+        }
+
+        syntaxTree(state).iterate({
+            enter: (node) => {
+                if (node.name === "Table") {
+                    if (!(selFrom <= node.to && selTo >= node.from)) {
+                        const tableText = state.doc.sliceString(node.from, node.to);
+                        decos.push({
+                            from: node.from,
+                            to: node.to,
+                            deco: Decoration.replace({ widget: new TableWidget(tableText), block: true })
+                        });
+                    }
+                }
+            }
+        });
+
+        decos.sort((a, b) => a.from - b.from || a.to - b.to);
+        let lastEnd = -1;
+        for (const d of decos) {
+            if (d.from >= lastEnd) {
+                try { builder.add(d.from, d.to, d.deco); lastEnd = d.to; } catch (e) { }
+            }
+        }
+        return builder.finish();
+    } catch (e) { return Decoration.none; }
+}
+
 const liveTheme = EditorView.theme({
     "&": { backgroundColor: "transparent", height: "100%", color: "var(--text-main)" },
     ".cm-scroller": { fontFamily: "var(--p-font)", fontSize: "var(--p-size)", lineHeight: "1.6", padding: "40px 20px" },
@@ -408,7 +559,7 @@ const liveTheme = EditorView.theme({
     ".cm-inline-code": { backgroundColor: "rgba(128, 128, 128, 0.15)", color: "#c2185b", padding: "2px 4px", borderRadius: "4px", fontFamily: '"JetBrains Mono", monospace', fontSize: "0.9em" }
 });
 
-const liveMdExtension = markdown({ base: markdownLanguage, codeLanguages: languages });
+const liveMdExtension = markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [Table] });
 const liveBasicSetup = { lineNumbers: false, foldGutter: false };
 
 const LivePreviewEditor = ({ value, onChange, onPaste, placeholder, editorViewRef }) => {
@@ -418,6 +569,7 @@ const LivePreviewEditor = ({ value, onChange, onPaste, placeholder, editorViewRe
     const extensions = useMemo(() => [
         liveMdExtension,
         EditorView.lineWrapping,
+        liveBlockStateField,
         livePreviewPlugin,
         EditorView.domEventHandlers({
             paste: (event, view) => {

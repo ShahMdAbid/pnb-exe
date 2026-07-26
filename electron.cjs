@@ -238,6 +238,8 @@ if (!gotTheLock) {
         const items = fs.readdirSync(dirPath);
         for (const item of items) {
           const fullPath = path.join(dirPath, item);
+          if (item.startsWith('.') || item.startsWith('~$')) continue;
+          
           const stat = fs.statSync(fullPath);
           
           if (stat.isDirectory()) {
@@ -351,6 +353,8 @@ if (!gotTheLock) {
          if (!fs.existsSync(dirPath)) return;
          const items = fs.readdirSync(dirPath);
          for (const item of items) {
+            if (item.startsWith('.') || item.startsWith('~$')) continue;
+            
             const fullPath = path.join(dirPath, item);
             const relPath = path.posix.join(relativeDir, item);
             const stat = fs.statSync(fullPath);

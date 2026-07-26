@@ -12,6 +12,8 @@ import { saveAs } from 'file-saver';
 import { exportPoringFile, importPoringFile } from './utils/poringFileHandler';
 import ColorfulEditor from './components/ColorfulEditor';
 import LivePreviewEditor from './components/LivePreviewEditor';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 // Standard memoization ensures the editors don't re-render unless their props change.
 import { memo } from 'react';
@@ -299,6 +301,24 @@ const SafeInject = ({ node, children, tagName, ...props }) => {
 };
 
 const MarkdownComponents = {
+    code({node, inline, className, children, ...props}) {
+        const match = /language-(\w+)/.exec(className || '');
+        const isDark = document.querySelector('.app-container')?.classList.contains('dark-theme') ?? true;
+        return !inline && match ? (
+            <SyntaxHighlighter
+                {...props}
+                children={String(children).replace(/\n$/, '')}
+                style={isDark ? vscDarkPlus : vs}
+                language={match[1]}
+                PreTag="div"
+                className="custom-syntax-highlighter"
+            />
+        ) : (
+            <code {...props} className={className}>
+                {children}
+            </code>
+        );
+    },
     img: CustomImage,
     a: (props) => {
         if (props.href && props.href.startsWith('#')) {
@@ -1957,7 +1977,9 @@ function App() {
                                         </div>
                                         <div className="insert-option" onClick={() => {
                                             const safeName = (name) => name.replace(/[^a-zA-Z0-9 -]/g, '').trim() || 'Untitled';
-                                            const notePath = `${workspacePath}\\notes\\${safeName(activeNote.name)}_${activeNote.id}.md`;
+                                            const folder = activeNote.folderId ? folders.find(f => f.id === activeNote.folderId) : null;
+                                            const folderName = folder ? safeName(folder.name) + '\\' : '';
+                                            const notePath = `${workspacePath}\\notes\\${folderName}${safeName(activeNote.name)}_${activeNote.id}.md`;
                                             navigator.clipboard.writeText(notePath);
                                             showToast("Path copied to clipboard!");
                                             setIsTitleMenuOpen(false);
@@ -2184,7 +2206,8 @@ function App() {
                         {viewMode === 'live' ? (
                             <MemoizedLiveEditor
                                 key={`live-${activeNoteId}`}
-                                value={editorInitialValue}
+                                noteId={activeNoteId}
+                                value={editorTextRef.current}
                                 onChange={handleEditorChange}
                                 onPaste={handlePaste}
                                 placeholder="Start typing... (Live Mode)"
@@ -2193,7 +2216,8 @@ function App() {
                         ) : (
                             <MemoizedColorfulEditor
                                 key={`write-${activeNoteId}`}
-                                value={editorInitialValue}
+                                noteId={activeNoteId}
+                                value={editorTextRef.current}
                                 onChange={handleEditorChange}
                                 onPaste={handlePaste}
                                 placeholder="Start typing..."
