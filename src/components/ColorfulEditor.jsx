@@ -6,10 +6,10 @@ import { EditorView, Decoration, MatchDecorator, ViewPlugin } from '@codemirror/
 
 const poringTheme = EditorView.theme({
     "&": { backgroundColor: "transparent", height: "100%", color: "var(--text-main)" },
-    ".cm-scroller": { fontFamily: '"JetBrains Mono", "Fira Code", monospace', fontSize: "14px", lineHeight: "1.6", padding: "20px 0" },
+    ".cm-scroller": { fontFamily: '"JetBrains Mono", "Fira Code", monospace', fontSize: "14px", lineHeight: "1.6", padding: "20px 10px" },
     "&.cm-focused": { outline: "none" },
     ".cm-gutters": { backgroundColor: "transparent", borderRight: "1px solid var(--border-color)", color: "#888", minWidth: "45px", paddingRight: "5px" },
-    ".cm-content": { paddingLeft: "10px", paddingRight: "25px" },
+    ".cm-content": { },
     ".cm-poring-keyword": { color: "#b91c1c", fontWeight: "bold" },
     ".cm-poring-spacer": { color: "#888", fontStyle: "italic" },
     ".cm-poring-inline-math": { color: "#d32f2f", backgroundColor: "rgba(211,47,47,0.05)", borderRadius: "3px", padding: "0 2px" },

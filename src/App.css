@@ -490,6 +490,7 @@ html,
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 /* Trash Icon - Hover Only */
@@ -512,11 +513,10 @@ html,
 
 /* Item Actions Container */
 .item-actions {
-  position: absolute;
-  right: 12px;
   display: flex;
   gap: 6px;
   align-items: center;
+  margin-left: auto;
 }
 
 .btn-danger {
@@ -1420,7 +1420,7 @@ html,
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 2500;
 }
 
 .modal-content {

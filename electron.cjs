@@ -164,27 +164,12 @@ if (!gotTheLock) {
       if (!fs.existsSync(newAssetsDir)) fs.mkdirSync(newAssetsDir, { recursive: true });
       if (!fs.existsSync(newNotesDir)) fs.mkdirSync(newNotesDir, { recursive: true });
 
-      // SMART MIGRATION: Only copy files if the target is a FRESH folder (no existing workspace.json).
-      // If the target already has a workspace.json, it means the user is switching BACK to an
-      // existing workspace — we must NOT overwrite their notes!
-      const targetIsExistingWorkspace = fs.existsSync(newWorkspaceJson);
-
-      if (!targetIsExistingWorkspace) {
-        // Fresh folder — migrate current notes there
-        try {
-          if (fs.existsSync(getAssetsDir())) {
-            fs.cpSync(getAssetsDir(), newAssetsDir, { recursive: true });
-          }
-          if (fs.existsSync(getNotesDir())) {
-            fs.cpSync(getNotesDir(), newNotesDir, { recursive: true });
-          }
-          const oldWorkspaceJson = path.join(currentWorkspace, 'workspace.json');
-          if (fs.existsSync(oldWorkspaceJson)) {
-            fs.copyFileSync(oldWorkspaceJson, newWorkspaceJson);
-          }
-        } catch (e) {
-          console.error("Failed to copy files during migration:", e);
-        }
+      // Ensure target directories exist (starts fresh and empty if new)
+      if (!fs.existsSync(newAssetsDir)) fs.mkdirSync(newAssetsDir, { recursive: true });
+      if (!fs.existsSync(newNotesDir)) fs.mkdirSync(newNotesDir, { recursive: true });
+      if (!fs.existsSync(newWorkspaceJson)) {
+          // Initialize empty workspace.json
+          fs.writeFileSync(newWorkspaceJson, JSON.stringify({ activeNoteId: null }, null, 2));
       }
 
       // Update to new workspace
@@ -236,23 +221,54 @@ if (!gotTheLock) {
     let watcherTimeout = null;
 
     function readWorkspaceData() {
+      const activeNotesDir = getNotesDir();
       const workspaceJsonPath = path.join(currentWorkspace, 'workspace.json');
-      if (!fs.existsSync(workspaceJsonPath)) return null;
-
-      try {
-        const data = JSON.parse(fs.readFileSync(workspaceJsonPath, 'utf8'));
-        const safeName = (name) => name.replace(/[^a-zA-Z0-9 -]/g, '').trim() || 'Untitled';
-
-        const notes = data.noteMeta.map(meta => {
-          const mdPath = path.join(getNotesDir(), `${safeName(meta.name)}_${meta.id}.md`);
-          const content = fs.existsSync(mdPath) ? fs.readFileSync(mdPath, 'utf8') : '';
-          cachedNotesHash[meta.id] = content.length + meta.name;
-          return { ...meta, content };
-        });
-        return { notes, folders: data.folders, activeNoteId: data.activeNoteId };
-      } catch (err) {
-        return null;
+      let activeNoteId = null;
+      if (fs.existsSync(workspaceJsonPath)) {
+        try {
+          const data = JSON.parse(fs.readFileSync(workspaceJsonPath, 'utf8'));
+          activeNoteId = data.activeNoteId;
+        } catch (e) {}
       }
+
+      function scanDir(dirPath, relativeDir = '') {
+        let results = { notes: [], folders: [] };
+        if (!fs.existsSync(dirPath)) return results;
+        
+        const items = fs.readdirSync(dirPath);
+        for (const item of items) {
+          const fullPath = path.join(dirPath, item);
+          const stat = fs.statSync(fullPath);
+          
+          if (stat.isDirectory()) {
+            const folderId = path.posix.join(relativeDir, item);
+            results.folders.push({ id: folderId, name: item });
+            const sub = scanDir(fullPath, folderId);
+            results.notes.push(...sub.notes);
+            results.folders.push(...sub.folders);
+          } else if (item.endsWith('.md')) {
+            const id = path.posix.join(relativeDir, item);
+            let name = item.replace(/\.md$/, '');
+            
+            // Backward compatibility for old `name_id.md` format
+            const match = name.match(/^(.*)_(\d+)$/);
+            let noteId = id;
+            if (match) {
+               name = match[1];
+               noteId = match[2]; 
+            }
+            
+            const content = fs.readFileSync(fullPath, 'utf8');
+            cachedNotesHash[noteId] = content.length + name + id;
+            
+            results.notes.push({ id: noteId, name, content, folderId: relativeDir || null, relativePath: id });
+          }
+        }
+        return results;
+      }
+
+      const { notes, folders } = scanDir(activeNotesDir);
+      return { notes, folders, activeNoteId };
     }
 
     function initWorkspaceWatcher() {
@@ -290,31 +306,69 @@ if (!gotTheLock) {
     ipcMain.handle('sync-workspace', (event, { notes, folders, activeNoteId }) => {
       isInternalSync = true;
       const safeName = (name) => name.replace(/[^a-zA-Z0-9 -]/g, '').trim() || 'Untitled';
-      const noteMeta = notes.map(n => ({ id: n.id, name: n.name, folderId: n.folderId }));
-      fs.writeFileSync(path.join(currentWorkspace, 'workspace.json'), JSON.stringify({ folders, activeNoteId, noteMeta }, null, 2));
+      
+      // Save activeNoteId
+      fs.writeFileSync(path.join(currentWorkspace, 'workspace.json'), JSON.stringify({ activeNoteId }, null, 2));
 
-      const currentFileNames = new Set();
       const activeNotesDir = getNotesDir();
+      const currentFileNames = new Set();
+      
+      // Build a map of folders to know their intended paths
+      const folderPaths = {};
+      folders.forEach(f => {
+         // If a folder was just created, it might have a timestamp ID, we just use its name
+         // If it's an existing folder, its ID is its relative path. 
+         // For now, let's assume flat folders (1 level deep) based on their name for safety,
+         // since the UI currently doesn't support nested folder creation anyway.
+         folderPaths[f.id] = safeName(f.name);
+         
+         const dir = path.join(activeNotesDir, folderPaths[f.id]);
+         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      });
 
       notes.forEach(n => {
         if (n.id.startsWith('about-poring-notebook')) return;
+        
+        const folderName = n.folderId ? (folderPaths[n.folderId] || n.folderId) : '';
         const fileName = `${safeName(n.name)}_${n.id}.md`;
-        currentFileNames.add(fileName);
-        const hash = n.content.length + n.name;
-        if (cachedNotesHash[n.id] !== hash) {
-          fs.writeFileSync(path.join(activeNotesDir, fileName), n.content || '');
+        const relativePath = path.posix.join(folderName, fileName);
+        const absolutePath = path.join(activeNotesDir, folderName, fileName);
+        
+        currentFileNames.add(relativePath);
+        
+        const dir = path.dirname(absolutePath);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+        const hash = n.content.length + n.name + relativePath;
+        if (cachedNotesHash[n.id] !== hash || !fs.existsSync(absolutePath)) {
+          fs.writeFileSync(absolutePath, n.content || '');
           cachedNotesHash[n.id] = hash;
         }
       });
 
-      if (fs.existsSync(activeNotesDir)) {
-        const files = fs.readdirSync(activeNotesDir);
-        files.forEach(file => {
-          if (file.endsWith('.md') && !currentFileNames.has(file)) {
-            try { fs.unlinkSync(path.join(activeNotesDir, file)); } catch (e) { }
-          }
-        });
+      // Cleanup files not in current state
+      function cleanupDir(dirPath, relativeDir = '') {
+         if (!fs.existsSync(dirPath)) return;
+         const items = fs.readdirSync(dirPath);
+         for (const item of items) {
+            const fullPath = path.join(dirPath, item);
+            const relPath = path.posix.join(relativeDir, item);
+            const stat = fs.statSync(fullPath);
+            if (stat.isDirectory()) {
+               cleanupDir(fullPath, relPath);
+               // Remove empty directories
+               if (fs.readdirSync(fullPath).length === 0) {
+                  fs.rmdirSync(fullPath);
+               }
+            } else if (item.endsWith('.md')) {
+               if (!currentFileNames.has(relPath)) {
+                  try { fs.unlinkSync(fullPath); } catch(e){}
+               }
+            }
+         }
       }
+      
+      cleanupDir(activeNotesDir);
 
       setTimeout(() => {
         isInternalSync = false;
@@ -427,6 +481,8 @@ if (!gotTheLock) {
               console.error("Pandoc Error:", error);
               return reject({ success: false, error: 'Pandoc is not installed or not found in PATH. Please install Pandoc from pandoc.org and restart your computer.' });
             }
+            // Auto-open the file in explorer so user can see where it was saved
+            shell.showItemInFolder(docxPath);
             resolve({ success: true, docxPath: docxPath });
           });
         } catch (err) {

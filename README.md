@@ -74,6 +74,8 @@ Switch between four view modes using the top-right mode toggles:
 - ◫ **Split**: Side-by-side Markdown editor and rendered preview.
 - 👁️ **Read**: Distraction-free full-screen reading mode.
 
+> **💡 Note:** Double-click on any line on the PDF preview to jump to the corresponding text box in the text editor.
+
 ---
 
 ### 7. 📄 Page Break Line (`***`) for PDF Printing

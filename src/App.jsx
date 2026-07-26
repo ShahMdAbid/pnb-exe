@@ -73,32 +73,36 @@ const ASSET_MAP = {
 
 // --- HELPER: Cover Page Templates ---
 const COVER_TEMPLATES = {
-    sust_eee: `center[#Shahjalal University of Science and Technology]
-//1
+    sust_eee: `<h1 align="center">Shahjalal University of Science and Technology</h1>
+<br/>
+
+<div align="center">
 
 ![Image|200](SUST_LOGO)
 
-//1
+</div>
+<br/>
 
-center[blue[##Department of Electrical & Electronic Engineering] ]
-//1
+<h2 align="center" style="color: blue;">Department of Electrical & Electronic Engineering</h2>
+<br/>
 
-center[###Course Title: ]
-center[###Course Code:]
-//1
+<h3 align="center">Course Title: </h3>
+<h3 align="center">Course Code:</h3>
+<br/>
 
-center[red[###Lab Report / Assignment]]
-//2
+<h3 align="center" style="color: red;">Lab Report / Assignment</h3>
+<br/><br/>
 
-###Experiment no. : 
-###**Experiment name**: 
+### Experiment no. : 
+### **Experiment name**: 
 
 | **Submitted By:** | **Submitted To:** |
 | :---------------- | :---------------- |
 | Name <br> Reg. No. :| Teacher's name  <br> Designation <br> Department |
 
+<br/>
 
-center[####Submission date : [today]]
+<h4 align="center">Submission date : [today]</h4>
 
 ***
 `
@@ -242,17 +246,25 @@ const PageGuides = ({ contentRef }) => {
             setGuides(newGuides);
         };
 
+        // Debounce to avoid thrashing during ReactMarkdown re-renders
+        let debounceTimer;
+        const debouncedCalculate = () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(calculateGuides, 100);
+        };
+
         calculateGuides();
 
-        ro = new ResizeObserver(calculateGuides);
+        ro = new ResizeObserver(debouncedCalculate);
         if (contentRef.current) ro.observe(contentRef.current);
 
-        mo = new MutationObserver(calculateGuides);
+        mo = new MutationObserver(debouncedCalculate);
         if (contentRef.current) {
             mo.observe(contentRef.current, { childList: true, subtree: true, characterData: true });
         }
 
         return () => {
+            clearTimeout(debounceTimer);
             if (ro) ro.disconnect();
             if (mo) mo.disconnect();
         };
@@ -460,7 +472,6 @@ function App() {
                 }
             } else {
                 editorTextRef.current = editorTextRef.current.replace(oldKey, newKey);
-                setInitialEditorValue(editorTextRef.current);
             }
         } else if (view) {
             // We created a brand new drawing. Insert it at cursor position.
@@ -478,37 +489,39 @@ function App() {
 
     // --- PERFORMANCE UPGRADE: UNCONTROLLED EDITOR STATE ---
     const editorTextRef = useRef('');
-    const [lastTypeTime, setLastTypeTime] = useState(Date.now());
+    const previewTimerRef = useRef(null);
     const prevNoteIdRef = useRef(activeNoteId);
+    // Track the "initial" value only for note switches — not during typing
+    const [editorInitialValue, setEditorInitialValue] = useState('');
 
     // 1. SYNC REF ON NOTE SWITCH (Runs during render to prevent stale data on mount)
     if (prevNoteIdRef.current !== activeNoteId) {
         const currentNote = notes.find(n => n.id === activeNoteId);
-        editorTextRef.current = currentNote?.content || '';
+        const content = currentNote?.content || '';
+        editorTextRef.current = content;
         prevNoteIdRef.current = activeNoteId;
     }
 
-    // 2. The Editor onChange (Fires on every keystroke, NO re-renders!)
-    const handleEditorChange = React.useCallback((val) => {
-        editorTextRef.current = val; 
-        setLastTypeTime(Date.now()); // Ping React to trigger the debouncer
-    }, []);
-
-    // 3. The SMART Preview Updater & Auto-Saver
+    // Update initial value ONLY on note switch (via useEffect to avoid setState during render)
     useEffect(() => {
-        // Small files (< 20k chars): update every 600ms. Massive files: update every 2500ms
-        const textLength = editorTextRef.current?.length || 0;
-        const delay = textLength > 20000 ? 2500 : 600; 
+        const currentNote = notes.find(n => n.id === activeNoteId);
+        setEditorInitialValue(currentNote?.content || '');
+    }, [activeNoteId]);
 
-        const handler = setTimeout(() => {
-            const currentNote = notes.find(n => n.id === activeNoteId);
-            if (currentNote && currentNote.content !== editorTextRef.current) {
-                updateContent(editorTextRef.current);
-            }
+    // 2. The Editor onChange — NO React state updates, NO re-renders!
+    const handleEditorChange = React.useCallback((val) => {
+        editorTextRef.current = val;
+
+        // Debounced preview update — purely ref-based, zero re-renders during typing
+        if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+        const delay = val.length > 20000 ? 800 : 150;
+        previewTimerRef.current = setTimeout(() => {
+            // This is the ONLY moment we trigger a React state update
+            setNotes(prevNotes => prevNotes.map(n =>
+                n.id === activeNoteIdRef.current ? { ...n, content: editorTextRef.current } : n
+            ));
         }, delay);
-
-        return () => clearTimeout(handler);
-    }, [lastTypeTime, activeNoteId]);
+    }, []);
 
     const handleDropNote = (e, targetFolderId) => {
         e.preventDefault();
@@ -799,34 +812,40 @@ function App() {
     useEffect(() => {
         aiConfigRef.current = { aiProvider, geminiKeys, activeGeminiIndex, geminiModel, apiKeys, activeApiKeyIndex };
     }, [aiProvider, geminiKeys, activeGeminiIndex, geminiModel, apiKeys, activeApiKeyIndex]);
+    // --- DEBOUNCED DISK SAVE (separate from preview updates) ---
+    const saveTimerRef = useRef(null);
     useEffect(() => {
         if (!isBooting) {
-            if (window.electronAPI && window.electronAPI.syncWorkspace) {
-                // --- NATIVE SAVE ---
-                // We strip out the internal About Note so it doesn't clutter the disk
-                const filteredNotes = notes.filter(n => !n.id.startsWith('about-poring-notebook') && n.id !== 'welcome-note-default');
-                window.electronAPI.syncWorkspace({ notes: filteredNotes, folders, activeNoteId });
-            } else {
-                // --- LEGACY WEB SAVE ---
-                localforage.setItem('poring_notes', notes);
-                localforage.setItem('poring_folders', folders);
-                localforage.setItem('poring_active_note', activeNoteId || '');
-            }
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+            saveTimerRef.current = setTimeout(() => {
+                if (window.electronAPI && window.electronAPI.syncWorkspace) {
+                    // --- NATIVE SAVE ---
+                    // We strip out the internal About Note so it doesn't clutter the disk
+                    const filteredNotes = notes.filter(n => !n.id.startsWith('about-poring-notebook') && n.id !== 'welcome-note-default');
+                    window.electronAPI.syncWorkspace({ notes: filteredNotes, folders, activeNoteId });
+                } else {
+                    // --- LEGACY WEB SAVE ---
+                    localforage.setItem('poring_notes', notes);
+                    localforage.setItem('poring_folders', folders);
+                    localforage.setItem('poring_active_note', activeNoteId || '');
+                }
 
-            // Keep lightweight settings in localStorage
-            localStorage.setItem('poring_typography', JSON.stringify(typography));
-            localStorage.setItem('poring_spacing', spacing);
-            localStorage.setItem('poring_theme', theme);
-            localStorage.setItem('groq_api_keys', JSON.stringify(apiKeys));
-            localStorage.setItem('poring_active_api_key_index', activeApiKeyIndex);
-            localStorage.setItem('poring_custom_templates', JSON.stringify(customTemplates));
-            localStorage.setItem('poring_saved_custom_instructions', JSON.stringify(savedCustomInstructions));
-            localStorage.setItem('poring_image_widths', JSON.stringify(imageWidths));
-            localStorage.setItem('poring_ai_provider', aiProvider);
-            localStorage.setItem('poring_gemini_keys', JSON.stringify(geminiKeys));
-            localStorage.setItem('poring_active_gemini_index', activeGeminiIndex);
-            localStorage.setItem('poring_gemini_model', geminiModel);
+                // Keep lightweight settings in localStorage
+                localStorage.setItem('poring_typography', JSON.stringify(typography));
+                localStorage.setItem('poring_spacing', spacing);
+                localStorage.setItem('poring_theme', theme);
+                localStorage.setItem('groq_api_keys', JSON.stringify(apiKeys));
+                localStorage.setItem('poring_active_api_key_index', activeApiKeyIndex);
+                localStorage.setItem('poring_custom_templates', JSON.stringify(customTemplates));
+                localStorage.setItem('poring_saved_custom_instructions', JSON.stringify(savedCustomInstructions));
+                localStorage.setItem('poring_image_widths', JSON.stringify(imageWidths));
+                localStorage.setItem('poring_ai_provider', aiProvider);
+                localStorage.setItem('poring_gemini_keys', JSON.stringify(geminiKeys));
+                localStorage.setItem('poring_active_gemini_index', activeGeminiIndex);
+                localStorage.setItem('poring_gemini_model', geminiModel);
+            }, 1000); // Save to disk every 1 second max, not on every keystroke
         }
+        return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
     }, [notes, folders, activeNoteId, typography, spacing, theme, apiKeys, activeApiKeyIndex, customTemplates, savedCustomInstructions, imageWidths, aiProvider, geminiKeys, activeGeminiIndex, geminiModel, isBooting]);
 
     // Clipboard Listener Receiver
@@ -884,7 +903,7 @@ function App() {
                         });
                         view.focus();
                     } else {
-                        setLocalContent(prev => prev + appendText);
+                        editorTextRef.current += appendText;
                     }
                 }
             });
@@ -1043,17 +1062,33 @@ function App() {
     };
 
     const handleInsertCoverPage = (key, isCustom = false) => {
-        const template = isCustom
-            ? customTemplates.find(t => t.id === key)?.content
-            : COVER_TEMPLATES[key];
+        try {
+            const template = isCustom
+                ? customTemplates.find(t => t.id === key)?.content
+                : COVER_TEMPLATES[key];
 
-        if (!template) return;
+            if (!template) {
+                alert("Template not found");
+                return;
+            }
 
-        const content = localContent;
-        const newText = template + content;
-        setLocalContent(newText);
-        setIsCoverPagePickerOpen(false);
-        setIsInsertMenuOpen(false);
+            const view = editorRef.current;
+            if (view) {
+                view.dispatch({
+                    changes: { from: 0, insert: template + '\n\n' },
+                    selection: { anchor: 0 }
+                });
+                view.focus();
+            } else {
+                editorTextRef.current = template + '\n\n' + editorTextRef.current;
+            }
+
+            setIsCoverPagePickerOpen(false);
+            setIsInsertMenuOpen(false);
+        } catch (err) {
+            console.error(err);
+            alert("Error: " + err.message);
+        }
     };
 
     const handleSaveAsTemplate = async () => {
@@ -1326,8 +1361,27 @@ function App() {
         const handleKeyDown = (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
                 e.preventDefault();
-                if (searchInputRef.current) {
-                    searchInputRef.current.focus();
+                const view = editorRef.current;
+                if (view) {
+                    const doc = view.state.doc;
+                    const { head } = view.state.selection.main;
+                    const line = doc.lineAt(head);
+                    
+                    let startLine = line.number;
+                    while (startLine > 1 && doc.line(startLine - 1).text.trim() !== '') {
+                        startLine--;
+                    }
+                    
+                    let endLine = line.number;
+                    while (endLine < doc.lines && doc.line(endLine + 1).text.trim() !== '') {
+                        endLine++;
+                    }
+                    
+                    const anchor = doc.line(startLine).from;
+                    const newHead = doc.line(endLine).to;
+                    
+                    view.dispatch({ selection: { anchor, head: newHead } });
+                    if (!view.hasFocus) view.focus();
                 }
             }
         };
@@ -1786,7 +1840,7 @@ function App() {
                             <input
                                 ref={searchInputRef}
                                 type="text"
-                                placeholder="Search notes... (Ctrl+F)"
+                                placeholder="Search notes..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
@@ -2130,7 +2184,7 @@ function App() {
                         {viewMode === 'live' ? (
                             <MemoizedLiveEditor
                                 key={`live-${activeNoteId}`}
-                                value={editorTextRef.current}
+                                value={editorInitialValue}
                                 onChange={handleEditorChange}
                                 onPaste={handlePaste}
                                 placeholder="Start typing... (Live Mode)"
@@ -2139,7 +2193,7 @@ function App() {
                         ) : (
                             <MemoizedColorfulEditor
                                 key={`write-${activeNoteId}`}
-                                value={editorTextRef.current}
+                                value={editorInitialValue}
                                 onChange={handleEditorChange}
                                 onPaste={handlePaste}
                                 placeholder="Start typing..."

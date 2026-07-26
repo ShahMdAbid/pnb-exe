@@ -390,8 +390,8 @@ const livePreviewPlugin = ViewPlugin.fromClass(class {
 
 const liveTheme = EditorView.theme({
     "&": { backgroundColor: "transparent", height: "100%", color: "var(--text-main)" },
-    ".cm-scroller": { fontFamily: "var(--p-font)", fontSize: "var(--p-size)", lineHeight: "1.6", padding: "40px 0" },
-    ".cm-content": { paddingLeft: "20px", paddingRight: "20px", maxWidth: "850px", margin: "0 auto" },
+    ".cm-scroller": { fontFamily: "var(--p-font)", fontSize: "var(--p-size)", lineHeight: "1.6", padding: "40px 20px" },
+    ".cm-content": { maxWidth: "850px", margin: "0 auto" },
     ".cm-hidden-markup": { display: "none" },
     ".cm-heading1": { fontSize: "2.2rem", fontWeight: "800", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.2em", paddingTop: "0.5em" },
     ".cm-heading2": { fontSize: "1.8rem", fontWeight: "700", paddingTop: "0.5em" },
