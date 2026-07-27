@@ -26,7 +26,7 @@ const MermaidChart = ({ code }) => {
         const currentId = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
         // Mermaid hates \r and might throw syntax errors
         const sanitizedCode = typeof code === 'string' ? code.replace(/\r/g, '') : '';
-        
+
         mermaid.render(currentId, sanitizedCode).then((result) => {
             if (isMounted) setSvg(result.svg);
         }).catch((e) => {
@@ -327,14 +327,14 @@ const SafeInject = ({ node, children, tagName, ...props }) => {
 };
 
 const MarkdownComponents = {
-    code({node, inline, className, children, ...props}) {
+    code({ node, inline, className, children, ...props }) {
         const match = /language-(\w+)/.exec(className || '');
         const isDark = document.querySelector('.app-container')?.classList.contains('dark-theme') ?? true;
-        
+
         if (!inline && match && match[1] === 'mermaid') {
             return <MermaidChart code={String(children).replace(/\n$/, '')} />;
         }
-        
+
         return !inline && match ? (
             <SyntaxHighlighter
                 {...props}
@@ -449,12 +449,12 @@ function App() {
         if (!view) return;
         const { from, to } = view.state.selection.main;
         const selectedText = view.state.sliceDoc(from, to);
-        
+
         if (!selectedText.trim()) {
             alert("Please highlight a word or phrase first!");
             return;
         }
-        
+
         setExplanationModal({ isOpen: true, keyword: selectedText, text: '' });
     };
 
@@ -464,14 +464,14 @@ function App() {
         if (!view) return;
         const { from, to } = view.state.selection.main;
         const { keyword, text } = explanationModal;
-        
+
         const insertText = `[[${keyword}]](${text})`;
-        
+
         view.dispatch({
             changes: { from, to, insert: insertText },
             selection: { anchor: from + insertText.length }
         });
-        
+
         view.focus();
         setExplanationModal({ isOpen: false, keyword: '', text: '' });
     };
@@ -651,10 +651,10 @@ function App() {
     useEffect(() => {
         // Migration Script: Runs once to convert custom syntax to HTML
         const hasMigrated = localStorage.getItem('poring_syntax_migrated_v2');
-        
+
         if (!hasMigrated && notes.length > 1) { // > 1 to ignore just the About Note
             console.log("Migrating custom syntax to Standard HTML...");
-            
+
             const migratedNotes = notes.map(note => {
                 if (note.id.startsWith('about-')) return note;
                 let text = note.content;
@@ -1416,20 +1416,20 @@ function App() {
                     const doc = view.state.doc;
                     const { head } = view.state.selection.main;
                     const line = doc.lineAt(head);
-                    
+
                     let startLine = line.number;
                     while (startLine > 1 && doc.line(startLine - 1).text.trim() !== '') {
                         startLine--;
                     }
-                    
+
                     let endLine = line.number;
                     while (endLine < doc.lines && doc.line(endLine + 1).text.trim() !== '') {
                         endLine++;
                     }
-                    
+
                     const anchor = doc.line(startLine).from;
                     const newHead = doc.line(endLine).to;
-                    
+
                     view.dispatch({ selection: { anchor, head: newHead } });
                     if (!view.hasFocus) view.focus();
                 }
@@ -1770,7 +1770,7 @@ function App() {
             const id = `explain_${footnoteCounter}`;
             explanations.set(id, { word, desc, counter: footnoteCounter });
             footnoteCounter++;
-            
+
             return `<a href="#${id}" id="ref_${id}" class="keyword-ref">${word}</a>`;
         });
 
@@ -1978,246 +1978,246 @@ function App() {
                 ) : (
                     <>
                         {/* Editor Pane (Shows in Split, Editor, OR Live mode) */}
-                {(viewMode === 'split' || viewMode === 'editor' || viewMode === 'live') && (
-                    <section className="editor-pane" style={(viewMode === 'editor' || viewMode === 'live') ? { borderRight: 'none' } : {}}>
-                        <div className="editor-info-bar">
-                            <div className="title-dropdown-container" style={{ position: 'relative' }}>
-                                <button
-                                    className={`btn-insert ${isTitleMenuOpen ? 'active' : ''}`}
-                                    onClick={() => setIsTitleMenuOpen(!isTitleMenuOpen)}
-                                    disabled={!activeNote}
-                                    title={activeNote?.name}
-                                    style={{ background: 'transparent', border: 'none', fontSize: '1rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', color: 'var(--text-main)', maxWidth: '100%', overflow: 'hidden' }}
-                                >
-                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px', display: 'inline-block' }}>
-                                        {activeNote?.name || 'No Note Selected'}
-                                    </span>
-                                    {activeNote && <ChevronDown size={14} style={{ flexShrink: 0 }} className={`arrow ${isTitleMenuOpen ? 'up' : ''}`} />}
-                                </button>
-
-                                {isTitleMenuOpen && activeNote && (
-                                    <div className="insert-menu" style={{ left: 0, right: 'auto', minWidth: '150px' }}>
-                                        <div className="insert-option" onClick={() => { renameNote(activeNote.id); setIsTitleMenuOpen(false); }}>
-                                            <Edit3 size={14} />
-                                            <span>Rename</span>
-                                        </div>
-                                        <div className="insert-option" onClick={() => {
-                                            const safeName = (name) => name.replace(/[^a-zA-Z0-9 -]/g, '').trim() || 'Untitled';
-                                            const folder = activeNote.folderId ? folders.find(f => f.id === activeNote.folderId) : null;
-                                            const folderName = folder ? safeName(folder.name) + '\\' : '';
-                                            const notePath = `${workspacePath}\\notes\\${folderName}${safeName(activeNote.name)}_${activeNote.id}.md`;
-                                            navigator.clipboard.writeText(notePath);
-                                            showToast("Path copied to clipboard!");
-                                            setIsTitleMenuOpen(false);
-                                        }}>
-                                            <ClipboardCheck size={14} />
-                                            <span>Copy Path</span>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                            {isRefining && <span className="refining-status"><Loader2 className="spin" size={14} /> Refining...</span>}
-
-                            {isCoverPagePickerOpen && (
-                                <div className="cover-picker-overlay" onClick={() => setIsCoverPagePickerOpen(false)}>
-                                    <div className="cover-picker-modal" onClick={e => e.stopPropagation()}>
-                                        <div className="modal-header">
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                <h3>Choose a Cover Page</h3>
-                                                <p style={{ fontSize: '0.8rem', color: '#666', margin: 0 }}>Presets or your saved templates</p>
-                                            </div>
-                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                                <button className="btn-save-tpl" onClick={handleSaveAsTemplate}>
-                                                    <Plus size={14} /> Save Current as Template
-                                                </button>
-                                                <X size={20} className="close-btn" onClick={() => setIsCoverPagePickerOpen(false)} />
-                                            </div>
-                                        </div>
-
-                                        <div className="template-scroll-area">
-                                            <div className="template-section">
-                                                <h4>Standard Presets</h4>
-                                                <div className="template-grid">
-                                                    <div className="template-card" onClick={() => handleInsertCoverPage('sust_eee')}>
-                                                        <div className="template-preview academic">
-                                                            <div className="line school"></div>
-                                                            <div className="line title"></div>
-                                                            <div className="line author"></div>
-                                                        </div>
-                                                        <span>SUST EEE Cover</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {customTemplates.length > 0 && (
-                                                <div className="template-section" style={{ marginTop: '24px' }}>
-                                                    <h4>My Templates</h4>
-                                                    <div className="template-grid">
-                                                        {customTemplates.map(tpl => (
-                                                            <div key={tpl.id} className="template-card" onClick={() => handleInsertCoverPage(tpl.id, true)}>
-                                                                <div className="template-preview custom">
-                                                                    <div className="tpl-delete-btn" onClick={(e) => handleDeleteTemplate(e, tpl.id)}>
-                                                                        <Trash2 size={12} />
-                                                                    </div>
-                                                                    <div className="tpl-content-hint">
-                                                                        {tpl.content.substring(0, 100)}...
-                                                                    </div>
-                                                                </div>
-                                                                <span>{tpl.name}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="ai-buttons-group">
-                                <div className={`format-toolbar-container ${isToolsMenuOpen ? 'expanded' : ''}`} style={{ display: 'flex', alignItems: 'center' }}>
-                                    {/* --- NEW 1-CLICK FORMATTING TOOLBAR --- */}
-                                    <div className="format-toolbar">
-                                        <button className="format-btn" onClick={() => handleFormatting("**", "**")} title="Bold"><Bold size={14} /></button>
-                                        <button className="format-btn" onClick={() => handleFormatting("*", "*")} title="Italic"><Italic size={14} /></button>
-                                        <button className="format-btn" onClick={() => handleFormatting("<u>", "</u>")} title="Underline"><Underline size={14} /></button>
-                                        <button className="format-btn" onClick={() => handleFormatting("~~", "~~")} title="Strikethrough"><Strikethrough size={14} /></button>
-                                        <button className="format-btn" onClick={() => handleFormatting("<mark>", "</mark>")} title="Highlight"><Highlighter size={14} /></button>
-                                        <div className="toolbar-divider"></div>
-                                        <button className="format-btn" onClick={() => handleFormatting('<div align="center">\n', '\n</div>')} title="Center Align"><AlignCenter size={14} /></button>
-
-                                        <div className="toolbar-divider"></div>
-                                        <button className="format-btn" onClick={handleOpenDrawMode} title="Draw / Annotate"><Pen size={14} /></button>
-                                        <div className="toolbar-divider"></div>
-                                        <button 
-                                            className="format-btn" 
-                                            onClick={handleOpenExplanation} 
-                                            title="Add Interactive Explanation/Footnote"
-                                        >
-                                            <MessageSquareText size={14} />
-                                        </button>
-                                    </div>
-
-                                    {/* --- ADVANCED TOOLS DROPDOWN --- */}
-                                    <div className="tools-dropdown-container" style={{ position: 'relative' }}>
+                        {(viewMode === 'split' || viewMode === 'editor' || viewMode === 'live') && (
+                            <section className="editor-pane" style={(viewMode === 'editor' || viewMode === 'live') ? { borderRight: 'none' } : {}}>
+                                <div className="editor-info-bar">
+                                    <div className="title-dropdown-container" style={{ position: 'relative' }}>
                                         <button
-                                            className={`btn-insert ${isToolsMenuOpen ? 'active' : ''}`}
-                                            onClick={() => setIsToolsMenuOpen(!isToolsMenuOpen)}
+                                            className={`btn-insert ${isTitleMenuOpen ? 'active' : ''}`}
+                                            onClick={() => setIsTitleMenuOpen(!isTitleMenuOpen)}
                                             disabled={!activeNote}
-                                            title="Advanced Tools"
+                                            title={activeNote?.name}
+                                            style={{ background: 'transparent', border: 'none', fontSize: '1rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', color: 'var(--text-main)', maxWidth: '100%', overflow: 'hidden' }}
                                         >
-                                            <Wrench size={14} />
-                                            <ChevronDown size={14} className={`arrow ${isToolsMenuOpen ? 'up' : ''}`} />
+                                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px', display: 'inline-block' }}>
+                                                {activeNote?.name || 'No Note Selected'}
+                                            </span>
+                                            {activeNote && <ChevronDown size={14} style={{ flexShrink: 0 }} className={`arrow ${isTitleMenuOpen ? 'up' : ''}`} />}
                                         </button>
 
-                                        {isToolsMenuOpen && (
-                                            <div className="insert-menu tools-menu">
-                                                <div className="insert-option" onClick={() => handleFormatting("", '\n<div class="manual-page-break"></div>\n')}>
-                                                    <span>Page Break</span>
+                                        {isTitleMenuOpen && activeNote && (
+                                            <div className="insert-menu" style={{ left: 0, right: 'auto', minWidth: '150px' }}>
+                                                <div className="insert-option" onClick={() => { renameNote(activeNote.id); setIsTitleMenuOpen(false); }}>
+                                                    <Edit3 size={14} />
+                                                    <span>Rename</span>
                                                 </div>
-
-                                                <div
-                                                    className="insert-option sub-menu-trigger"
-                                                    onMouseEnter={() => setIsColorMenuOpen(true)}
-                                                    onMouseLeave={() => setIsColorMenuOpen(false)}
-                                                >
-                                                    <Palette size={14} />
-                                                    <span>Color</span>
-                                                    <ChevronRight size={14} style={{ marginLeft: 'auto' }} />
-
-                                                    {isColorMenuOpen && (
-                                                        <div className="insert-menu color-submenu">
-                                                            {['Red', 'Blue', 'Green', 'Orange', 'Purple', 'Gray'].map(clr => (
-                                                                <div
-                                                                    key={clr}
-                                                                    className="insert-option"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleFormatting(`<span style="color: ${clr.toLowerCase()};">`, "</span>");
-                                                                    }}
-                                                                >
-                                                                    <div className={`color-dot bg-${clr.toLowerCase()}`} />
-                                                                    <span>{clr}</span>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                <div className="insert-option" onClick={handleVerticalSpacing}>
-                                                    <span>Vertical Spacing</span>
-                                                </div>
-                                                <div className="insert-option" onClick={handleBreakMathBlock}>
-                                                    {isBreakingMath ? <Loader2 className="spin" size={14} /> : <Scissors size={14} />}
-                                                    <span>{isBreakingMath ? 'Breaking...' : 'Break Math Block'}</span>
+                                                <div className="insert-option" onClick={() => {
+                                                    const safeName = (name) => name.replace(/[^a-zA-Z0-9 -]/g, '').trim() || 'Untitled';
+                                                    const folder = activeNote.folderId ? folders.find(f => f.id === activeNote.folderId) : null;
+                                                    const folderName = folder ? safeName(folder.name) + '\\' : '';
+                                                    const notePath = `${workspacePath}\\notes\\${folderName}${safeName(activeNote.name)}_${activeNote.id}.md`;
+                                                    navigator.clipboard.writeText(notePath);
+                                                    showToast("Path copied to clipboard!");
+                                                    setIsTitleMenuOpen(false);
+                                                }}>
+                                                    <ClipboardCheck size={14} />
+                                                    <span>Copy Path</span>
                                                 </div>
                                             </div>
                                         )}
                                     </div>
-                                </div>
+                                    {isRefining && <span className="refining-status"><Loader2 className="spin" size={14} /> Refining...</span>}
 
-                                <div className="insert-dropdown-container">
-                                    <button
-                                        className={`btn-insert ${isInsertMenuOpen ? 'active' : ''}`}
-                                        onClick={() => setIsInsertMenuOpen(!isInsertMenuOpen)}
-                                        disabled={!activeNote}
-                                    >
-                                        <Plus size={14} />
-                                        <span>Insert</span>
-                                        <ChevronDown size={14} className={`arrow ${isInsertMenuOpen ? 'up' : ''}`} />
-                                    </button>
+                                    {isCoverPagePickerOpen && (
+                                        <div className="cover-picker-overlay" onClick={() => setIsCoverPagePickerOpen(false)}>
+                                            <div className="cover-picker-modal" onClick={e => e.stopPropagation()}>
+                                                <div className="modal-header">
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                        <h3>Choose a Cover Page</h3>
+                                                        <p style={{ fontSize: '0.8rem', color: '#666', margin: 0 }}>Presets or your saved templates</p>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                        <button className="btn-save-tpl" onClick={handleSaveAsTemplate}>
+                                                            <Plus size={14} /> Save Current as Template
+                                                        </button>
+                                                        <X size={20} className="close-btn" onClick={() => setIsCoverPagePickerOpen(false)} />
+                                                    </div>
+                                                </div>
 
-                                    {isInsertMenuOpen && (
-                                        <div className="insert-menu">
-                                            <div className="insert-option" onClick={handleInsertPicture}>
-                                                <span>Picture</span>
-                                            </div>
-                                            <div className="insert-option" onClick={handleInsertTable}>
-                                                <span>Table</span>
-                                            </div>
-                                            <div className="insert-option" onClick={() => { setIsCoverPagePickerOpen(true); setIsInsertMenuOpen(false); }}>
-                                                <span>Cover Page</span>
+                                                <div className="template-scroll-area">
+                                                    <div className="template-section">
+                                                        <h4>Standard Presets</h4>
+                                                        <div className="template-grid">
+                                                            <div className="template-card" onClick={() => handleInsertCoverPage('sust_eee')}>
+                                                                <div className="template-preview academic">
+                                                                    <div className="line school"></div>
+                                                                    <div className="line title"></div>
+                                                                    <div className="line author"></div>
+                                                                </div>
+                                                                <span>SUST EEE Cover</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {customTemplates.length > 0 && (
+                                                        <div className="template-section" style={{ marginTop: '24px' }}>
+                                                            <h4>My Templates</h4>
+                                                            <div className="template-grid">
+                                                                {customTemplates.map(tpl => (
+                                                                    <div key={tpl.id} className="template-card" onClick={() => handleInsertCoverPage(tpl.id, true)}>
+                                                                        <div className="template-preview custom">
+                                                                            <div className="tpl-delete-btn" onClick={(e) => handleDeleteTemplate(e, tpl.id)}>
+                                                                                <Trash2 size={12} />
+                                                                            </div>
+                                                                            <div className="tpl-content-hint">
+                                                                                {tpl.content.substring(0, 100)}...
+                                                                            </div>
+                                                                        </div>
+                                                                        <span>{tpl.name}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     )}
-                                    <input
-                                        type="file"
-                                        ref={imageInputRef}
-                                        style={{ display: 'none' }}
-                                        accept="image/*"
-                                        onChange={onImageFileChange}
-                                    />
-                                </div>
-                                {/* --- MINIMALIST ICON-ONLY CLIPBOARD BUTTON --- */}
-                                <button
-                                    className={`btn-auto-note ${isAutoNoteEnabled ? 'active' : ''}`}
-                                    onClick={toggleAutoNote}
-                                    disabled={!activeNote}
-                                    title={
-                                        !isAutoNoteEnabled
-                                            ? "Auto-Note: OFF"
-                                            : "Auto-Note: ON"
-                                    }
-                                    style={{
-                                        background: isAutoNoteEnabled ? '#10b981' : 'transparent',
-                                        color: isAutoNoteEnabled ? 'white' : 'var(--text-main)',
-                                        border: isAutoNoteEnabled ? 'none' : '1px solid var(--border-color)',
-                                        width: '34px',
-                                        height: '34px',
-                                        borderRadius: '6px',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                        boxShadow: 'none',
-                                        flexShrink: 0
-                                    }}
-                                >
-                                    <ClipboardCheck size={18} />
-                                </button>
-                                {/* Undo button removed as requested */}
-                                {/* AI Features Deprecated 
+
+                                    <div className="ai-buttons-group">
+                                        <div className={`format-toolbar-container ${isToolsMenuOpen ? 'expanded' : ''}`} style={{ display: 'flex', alignItems: 'center' }}>
+                                            {/* --- NEW 1-CLICK FORMATTING TOOLBAR --- */}
+                                            <div className="format-toolbar">
+                                                <button className="format-btn" onClick={() => handleFormatting("**", "**")} title="Bold"><Bold size={14} /></button>
+                                                <button className="format-btn" onClick={() => handleFormatting("*", "*")} title="Italic"><Italic size={14} /></button>
+                                                <button className="format-btn" onClick={() => handleFormatting("<u>", "</u>")} title="Underline"><Underline size={14} /></button>
+                                                <button className="format-btn" onClick={() => handleFormatting("~~", "~~")} title="Strikethrough"><Strikethrough size={14} /></button>
+                                                <button className="format-btn" onClick={() => handleFormatting("<mark>", "</mark>")} title="Highlight"><Highlighter size={14} /></button>
+                                                <div className="toolbar-divider"></div>
+                                                <button className="format-btn" onClick={() => handleFormatting('<div align="center">\n', '\n</div>')} title="Center Align"><AlignCenter size={14} /></button>
+
+                                                <div className="toolbar-divider"></div>
+                                                <button className="format-btn" onClick={handleOpenDrawMode} title="Draw / Annotate"><Pen size={14} /></button>
+                                                <div className="toolbar-divider"></div>
+                                                <button
+                                                    className="format-btn"
+                                                    onClick={handleOpenExplanation}
+                                                    title="Add Interactive Explanation/Footnote"
+                                                >
+                                                    <MessageSquareText size={14} />
+                                                </button>
+                                            </div>
+
+                                            {/* --- ADVANCED TOOLS DROPDOWN --- */}
+                                            <div className="tools-dropdown-container" style={{ position: 'relative' }}>
+                                                <button
+                                                    className={`btn-insert ${isToolsMenuOpen ? 'active' : ''}`}
+                                                    onClick={() => setIsToolsMenuOpen(!isToolsMenuOpen)}
+                                                    disabled={!activeNote}
+                                                    title="Advanced Tools"
+                                                >
+                                                    <Wrench size={14} />
+                                                    <ChevronDown size={14} className={`arrow ${isToolsMenuOpen ? 'up' : ''}`} />
+                                                </button>
+
+                                                {isToolsMenuOpen && (
+                                                    <div className="insert-menu tools-menu">
+                                                        <div className="insert-option" onClick={() => handleFormatting("", '\n<div class="manual-page-break"></div>\n')}>
+                                                            <span>Page Break</span>
+                                                        </div>
+
+                                                        <div
+                                                            className="insert-option sub-menu-trigger"
+                                                            onMouseEnter={() => setIsColorMenuOpen(true)}
+                                                            onMouseLeave={() => setIsColorMenuOpen(false)}
+                                                        >
+                                                            <Palette size={14} />
+                                                            <span>Color</span>
+                                                            <ChevronRight size={14} style={{ marginLeft: 'auto' }} />
+
+                                                            {isColorMenuOpen && (
+                                                                <div className="insert-menu color-submenu">
+                                                                    {['Red', 'Blue', 'Green', 'Orange', 'Purple', 'Gray'].map(clr => (
+                                                                        <div
+                                                                            key={clr}
+                                                                            className="insert-option"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleFormatting(`<span style="color: ${clr.toLowerCase()};">`, "</span>");
+                                                                            }}
+                                                                        >
+                                                                            <div className={`color-dot bg-${clr.toLowerCase()}`} />
+                                                                            <span>{clr}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="insert-option" onClick={handleVerticalSpacing}>
+                                                            <span>Vertical Spacing</span>
+                                                        </div>
+                                                        <div className="insert-option" onClick={handleBreakMathBlock}>
+                                                            {isBreakingMath ? <Loader2 className="spin" size={14} /> : <Scissors size={14} />}
+                                                            <span>{isBreakingMath ? 'Breaking...' : 'Break Math Block'}</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="insert-dropdown-container">
+                                            <button
+                                                className={`btn-insert ${isInsertMenuOpen ? 'active' : ''}`}
+                                                onClick={() => setIsInsertMenuOpen(!isInsertMenuOpen)}
+                                                disabled={!activeNote}
+                                            >
+                                                <Plus size={14} />
+                                                <span>Insert</span>
+                                                <ChevronDown size={14} className={`arrow ${isInsertMenuOpen ? 'up' : ''}`} />
+                                            </button>
+
+                                            {isInsertMenuOpen && (
+                                                <div className="insert-menu">
+                                                    <div className="insert-option" onClick={handleInsertPicture}>
+                                                        <span>Picture</span>
+                                                    </div>
+                                                    <div className="insert-option" onClick={handleInsertTable}>
+                                                        <span>Table</span>
+                                                    </div>
+                                                    <div className="insert-option" onClick={() => { setIsCoverPagePickerOpen(true); setIsInsertMenuOpen(false); }}>
+                                                        <span>Cover Page</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <input
+                                                type="file"
+                                                ref={imageInputRef}
+                                                style={{ display: 'none' }}
+                                                accept="image/*"
+                                                onChange={onImageFileChange}
+                                            />
+                                        </div>
+                                        {/* --- MINIMALIST ICON-ONLY CLIPBOARD BUTTON --- */}
+                                        <button
+                                            className={`btn-auto-note ${isAutoNoteEnabled ? 'active' : ''}`}
+                                            onClick={toggleAutoNote}
+                                            disabled={!activeNote}
+                                            title={
+                                                !isAutoNoteEnabled
+                                                    ? "Auto-Note: OFF"
+                                                    : "Auto-Note: ON"
+                                            }
+                                            style={{
+                                                background: isAutoNoteEnabled ? '#10b981' : 'transparent',
+                                                color: isAutoNoteEnabled ? 'white' : 'var(--text-main)',
+                                                border: isAutoNoteEnabled ? 'none' : '1px solid var(--border-color)',
+                                                width: '34px',
+                                                height: '34px',
+                                                borderRadius: '6px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                boxShadow: 'none',
+                                                flexShrink: 0
+                                            }}
+                                        >
+                                            <ClipboardCheck size={18} />
+                                        </button>
+                                        {/* Undo button removed as requested */}
+                                        {/* AI Features Deprecated 
                                 <button className="btn-custom-refine" onClick={() => setIsCustomRefineOpen(true)} disabled={isRefining || !activeNote} title="Custom Refine">
                                     <Wand2 size={14} />
                                 </button>
@@ -2225,115 +2225,115 @@ function App() {
                                     {isRefining ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}
                                 </button>
                                 */}
-                            </div>
-                        </div>
+                                    </div>
+                                </div>
 
-                        {/* THE NEW CONDITIONAL EDITOR RENDERING */}
-                        {viewMode === 'live' ? (
-                            <MemoizedLiveEditor
-                                key={`live-${activeNoteId}`}
-                                noteId={activeNoteId}
-                                value={editorTextRef.current}
-                                onChange={handleEditorChange}
-                                onPaste={handlePaste}
-                                placeholder="Start typing... (Live Mode)"
-                                editorViewRef={editorRef}
-                            />
-                        ) : (
-                            <MemoizedColorfulEditor
-                                key={`write-${activeNoteId}`}
-                                noteId={activeNoteId}
-                                value={editorTextRef.current}
-                                onChange={handleEditorChange}
-                                onPaste={handlePaste}
-                                placeholder="Start typing..."
-                                editorViewRef={editorRef}
-                            />
+                                {/* THE NEW CONDITIONAL EDITOR RENDERING */}
+                                {viewMode === 'live' ? (
+                                    <MemoizedLiveEditor
+                                        key={`live-${activeNoteId}`}
+                                        noteId={activeNoteId}
+                                        value={editorTextRef.current}
+                                        onChange={handleEditorChange}
+                                        onPaste={handlePaste}
+                                        placeholder="Start typing... (Live Mode)"
+                                        editorViewRef={editorRef}
+                                    />
+                                ) : (
+                                    <MemoizedColorfulEditor
+                                        key={`write-${activeNoteId}`}
+                                        noteId={activeNoteId}
+                                        value={editorTextRef.current}
+                                        onChange={handleEditorChange}
+                                        onPaste={handlePaste}
+                                        placeholder="Start typing..."
+                                        editorViewRef={editorRef}
+                                    />
+                                )}
+                            </section>
                         )}
-                    </section>
-                )}
 
-                {/* CONDITIONAL PREVIEW PANE */}
-                {(viewMode === 'split' || viewMode === 'preview') && (
-                    <section className="preview-pane">
-                        <div className="preview-header">
-                            <span>PDF Preview</span>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                                <div className="export-dropdown-container">
-                                    <button 
-                                        className="btn-export" 
-                                        onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} 
-                                        disabled={!activeNote}
-                                        title="More Export Options"
-                                    >
-                                        Export <ChevronDown size={14} />
-                                    </button>
-                                    {isExportMenuOpen && (
-                                        <div className="export-menu">
-                                            <div className="export-option" onClick={async () => {
-                                                setIsExportMenuOpen(false);
-                                                if (!window.electronAPI?.exportToDocx) return;
-                                                try {
-                                                    showToast("Generating .docx...");
-                                                    const result = await window.electronAPI.exportToDocx({
-                                                        markdown: activeNote.content,
-                                                        title: activeNote.name,
-                                                        customPandocPath: customPandocPath.trim()
-                                                    });
-                                                    if (result.success) showToast("Export Successful!");
-                                                } catch (err) { alert(err.error); }
-                                            }}>
-                                                <FileText size={14} color="#3b82f6" /> Word (.docx)
-                                            </div>
-                                            <div className="export-option" onClick={async () => {
-                                                setIsExportMenuOpen(false);
-                                                if (!window.electronAPI?.exportToGdocs) return;
-                                                try {
-                                                    showToast("Login to Google Drive... Check Browser!");
-                                                    const result = await window.electronAPI.exportToGdocs({
-                                                        markdown: activeNote.content,
-                                                        title: activeNote.name,
-                                                        customPandocPath: customPandocPath.trim()
-                                                    });
-                                                    if (result.success) {
-                                                        showToast("Successfully Uploaded to Google Docs!");
-                                                    } else { throw new Error(result.error || "Unknown error"); }
-                                                } catch (err) { alert("Google Docs Error: " + (err.message || err)); }
-                                            }}>
-                                                <Cloud size={14} color="#10b981" /> Google Docs
-                                            </div>
-                                            <div className="export-option" onClick={() => {
-                                                setIsExportMenuOpen(false);
-                                                handleExportPoring();
-                                            }}>
-                                                <Download size={14} color="#eab308" /> Archive (.zip)
-                                            </div>
+                        {/* CONDITIONAL PREVIEW PANE */}
+                        {(viewMode === 'split' || viewMode === 'preview') && (
+                            <section className="preview-pane">
+                                <div className="preview-header">
+                                    <span>PDF Preview</span>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <div className="export-dropdown-container">
+                                            <button
+                                                className="btn-export"
+                                                onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+                                                disabled={!activeNote}
+                                                title="More Export Options"
+                                            >
+                                                Export <ChevronDown size={14} />
+                                            </button>
+                                            {isExportMenuOpen && (
+                                                <div className="export-menu">
+                                                    <div className="export-option" onClick={async () => {
+                                                        setIsExportMenuOpen(false);
+                                                        if (!window.electronAPI?.exportToDocx) return;
+                                                        try {
+                                                            showToast("Generating .docx...");
+                                                            const result = await window.electronAPI.exportToDocx({
+                                                                markdown: activeNote.content,
+                                                                title: activeNote.name,
+                                                                customPandocPath: customPandocPath.trim()
+                                                            });
+                                                            if (result.success) showToast("Export Successful!");
+                                                        } catch (err) { alert(err.error); }
+                                                    }}>
+                                                        <FileText size={14} color="#3b82f6" /> Word (.docx)
+                                                    </div>
+                                                    <div className="export-option" onClick={async () => {
+                                                        setIsExportMenuOpen(false);
+                                                        if (!window.electronAPI?.exportToGdocs) return;
+                                                        try {
+                                                            showToast("Login to Google Drive... Check Browser!");
+                                                            const result = await window.electronAPI.exportToGdocs({
+                                                                markdown: activeNote.content,
+                                                                title: activeNote.name,
+                                                                customPandocPath: customPandocPath.trim()
+                                                            });
+                                                            if (result.success) {
+                                                                showToast("Successfully Uploaded to Google Docs!");
+                                                            } else { throw new Error(result.error || "Unknown error"); }
+                                                        } catch (err) { alert("Google Docs Error: " + (err.message || err)); }
+                                                    }}>
+                                                        <Cloud size={14} color="#10b981" /> Google Docs
+                                                    </div>
+                                                    <div className="export-option" onClick={() => {
+                                                        setIsExportMenuOpen(false);
+                                                        handleExportPoring();
+                                                    }}>
+                                                        <Download size={14} color="#eab308" /> Archive (.zip)
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
+                                        <button className="btn-export" style={{ background: 'var(--accent)', color: 'white', borderColor: 'var(--accent)' }} onClick={handleDownloadPDF} disabled={!activeNote} title="Export as PDF">
+                                            <Download size={14} /> PDF
+                                        </button>
+                                    </div>
                                 </div>
-                                <button className="btn-export" style={{ background: 'var(--accent)', color: 'white', borderColor: 'var(--accent)' }} onClick={handleDownloadPDF} disabled={!activeNote} title="Export as PDF">
-                                    <Download size={14} /> PDF
-                                </button>
-                            </div>
-                        </div>
-                        <div className="pages-stack">
-                            <PageGuides contentRef={previewRef} />
-                            <div className="preview-content" ref={previewRef} onClick={handlePreviewClick}>
-                                <div className="page-container markdown-body">
-                                    <ReactMarkdown
-                                        remarkPlugins={[remarkGfm, remarkMath, remarkFootnotes, remarkBreaks]}
-                                        rehypePlugins={[rehypeRaw, [rehypeKatex, { strict: false }]]}
-                                        components={MarkdownComponents}
-                                        urlTransform={(url) => url}
-                                    >
-                                        {processedMarkdown}
-                                    </ReactMarkdown>
+                                <div className="pages-stack">
+                                    <PageGuides contentRef={previewRef} />
+                                    <div className="preview-content" ref={previewRef} onClick={handlePreviewClick}>
+                                        <div className="page-container markdown-body">
+                                            <ReactMarkdown
+                                                remarkPlugins={[remarkGfm, remarkMath, remarkFootnotes, remarkBreaks]}
+                                                rehypePlugins={[rehypeRaw, [rehypeKatex, { strict: false }]]}
+                                                components={MarkdownComponents}
+                                                urlTransform={(url) => url}
+                                            >
+                                                {processedMarkdown}
+                                            </ReactMarkdown>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                        </div>
-                    </section>
-                )}
-                </>
+                            </section>
+                        )}
+                    </>
                 )}
             </main>
 
@@ -2363,54 +2363,54 @@ function App() {
                             {settingsTab === 'general' && (
                                 <>
                                     {/* --- NEW SECTION: Storage & Workspace --- */}
-                            <div className="settings-group">
-                                <span className="settings-label-main">Storage & Sync</span>
-                                <div className="settings-card">
-                                    <div className="settings-row" style={{ borderBottom: 'none' }}>
-                                        <div className="settings-row-info">
-                                            <span className="settings-row-title">Workspace Folder</span>
-                                            <span className="settings-row-desc" style={{ wordBreak: 'break-all', paddingRight: '12px' }}>
-                                                {workspacePath}
-                                            </span>
+                                    <div className="settings-group">
+                                        <span className="settings-label-main">Storage & Sync</span>
+                                        <div className="settings-card">
+                                            <div className="settings-row" style={{ borderBottom: 'none' }}>
+                                                <div className="settings-row-info">
+                                                    <span className="settings-row-title">Workspace Folder</span>
+                                                    <span className="settings-row-desc" style={{ wordBreak: 'break-all', paddingRight: '12px' }}>
+                                                        {workspacePath}
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    className="btn-primary"
+                                                    style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '0.85rem', flexShrink: 0 }}
+                                                    onClick={async () => {
+                                                        if (window.electronAPI?.changeWorkspace) {
+                                                            const newPath = await window.electronAPI.changeWorkspace();
+                                                            if (newPath) {
+                                                                setWorkspacePath(newPath);
+                                                                alert("Workspace changed! The app will now reload to load your notes from the new folder.");
+                                                                window.location.reload();
+                                                            }
+                                                        }
+                                                    }}
+                                                >
+                                                    Change Folder
+                                                </button>
+                                            </div>
+                                            <div className="settings-row" style={{ borderBottom: 'none' }}>
+                                                <div className="settings-row-info">
+                                                    <span className="settings-row-title">Custom Pandoc Path</span>
+                                                    <span className="settings-row-desc">If export fails, paste the absolute path to pandoc here.</span>
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    className="settings-input"
+                                                    value={customPandocPath}
+                                                    onChange={(e) => {
+                                                        setCustomPandocPath(e.target.value);
+                                                        localStorage.setItem('customPandocPath', e.target.value);
+                                                    }}
+                                                    placeholder="e.g. /usr/local/bin/pandoc"
+                                                    style={{ width: '250px', padding: '6px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-editor)', color: 'var(--text-main)' }}
+                                                />
+                                            </div>
                                         </div>
-                                        <button 
-                                            className="btn-primary"
-                                            style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '0.85rem', flexShrink: 0 }}
-                                            onClick={async () => {
-                                                if(window.electronAPI?.changeWorkspace) {
-                                                    const newPath = await window.electronAPI.changeWorkspace();
-                                                    if(newPath) {
-                                                        setWorkspacePath(newPath);
-                                                        alert("Workspace changed! The app will now reload to load your notes from the new folder.");
-                                                        window.location.reload();
-                                                    }
-                                                }
-                                            }}
-                                        >
-                                            Change Folder
-                                        </button>
                                     </div>
-                                    <div className="settings-row" style={{ borderBottom: 'none' }}>
-                                        <div className="settings-row-info">
-                                            <span className="settings-row-title">Custom Pandoc Path</span>
-                                            <span className="settings-row-desc">If export fails, paste the absolute path to pandoc here.</span>
-                                        </div>
-                                        <input
-                                            type="text"
-                                            className="settings-input"
-                                            value={customPandocPath}
-                                            onChange={(e) => {
-                                                setCustomPandocPath(e.target.value);
-                                                localStorage.setItem('customPandocPath', e.target.value);
-                                            }}
-                                            placeholder="e.g. /usr/local/bin/pandoc"
-                                            style={{ width: '250px', padding: '6px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-editor)', color: 'var(--text-main)' }}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
 
-                            {/* AI Features Deprecated 
+                                    {/* AI Features Deprecated 
                             <div className="settings-group">
                                 <span className="settings-label-main">Workflow & AI</span>
                                 <div className="settings-card">
@@ -2561,73 +2561,73 @@ function App() {
 
                             {settingsTab === 'appearance' && (
                                 <>
-                            {/* Section: Editor & Media */}
-                            <div className="settings-group">
-                                <span className="settings-label-main">Editor & Media</span>
-                                <div className="settings-card">
-                                    <div className="settings-row" style={{ gap: '16px' }}>
-                                        <div style={{ flex: 1 }}>
-                                            <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Pasted Image Width (px)</span>
-                                            <input
-                                                type="number"
-                                                value={imageWidths.pasted}
-                                                onChange={(e) => setImageWidths({ ...imageWidths, pasted: e.target.value === '' ? '' : parseInt(e.target.value) })}
-                                                onBlur={() => setImageWidths({ ...imageWidths, pasted: imageWidths.pasted || 300 })}
-                                                className="elite-input"
-                                            />
-                                        </div>
-                                        <div style={{ flex: 1 }}>
-                                            <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Auto-Note Image Width (px)</span>
-                                            <input
-                                                type="number"
-                                                value={imageWidths.autoNote}
-                                                onChange={(e) => setImageWidths({ ...imageWidths, autoNote: e.target.value === '' ? '' : parseInt(e.target.value) })}
-                                                onBlur={() => setImageWidths({ ...imageWidths, autoNote: imageWidths.autoNote || 450 })}
-                                                className="elite-input"
-                                            />
+                                    {/* Section: Editor & Media */}
+                                    <div className="settings-group">
+                                        <span className="settings-label-main">Editor & Media</span>
+                                        <div className="settings-card">
+                                            <div className="settings-row" style={{ gap: '16px' }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Pasted Image Width (px)</span>
+                                                    <input
+                                                        type="number"
+                                                        value={imageWidths.pasted}
+                                                        onChange={(e) => setImageWidths({ ...imageWidths, pasted: e.target.value === '' ? '' : parseInt(e.target.value) })}
+                                                        onBlur={() => setImageWidths({ ...imageWidths, pasted: imageWidths.pasted || 300 })}
+                                                        className="elite-input"
+                                                    />
+                                                </div>
+                                                <div style={{ flex: 1 }}>
+                                                    <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Auto-Note Image Width (px)</span>
+                                                    <input
+                                                        type="number"
+                                                        value={imageWidths.autoNote}
+                                                        onChange={(e) => setImageWidths({ ...imageWidths, autoNote: e.target.value === '' ? '' : parseInt(e.target.value) })}
+                                                        onBlur={() => setImageWidths({ ...imageWidths, autoNote: imageWidths.autoNote || 450 })}
+                                                        className="elite-input"
+                                                    />
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            </div>
 
-                            {/* Section: Typography */}
-                            <div className="settings-group">
-                                <span className="settings-label-main">Typography & Spacing</span>
-                                <div className="settings-card">
-                                    <div className="settings-row" style={{ gap: '16px', borderBottom: 'none', paddingBottom: '0' }}>
-                                        <div style={{ flex: 1 }}>
-                                            <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Font Family</span>
-                                            <select value={typography.font} onChange={(e) => setTypography({ ...typography, font: e.target.value })} className="elite-select">
-                                                <option value="Sans">Modern (Sans)</option>
-                                                <option value="Serif">LaTeX (Standard)</option>
-                                                <option value="Mono">Code (Mono)</option>
-                                            </select>
-                                        </div>
-                                        <div style={{ flex: 1 }}>
-                                            <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Line Spacing</span>
-                                            <select value={spacing} onChange={(e) => setSpacing(e.target.value)} className="elite-select">
-                                                <option value="Too narrow">Too narrow</option>
-                                                <option value="narrow">Narrow</option>
-                                                <option value="normal">Normal</option>
-                                                <option value="wide">Wide</option>
-                                            </select>
+                                    {/* Section: Typography */}
+                                    <div className="settings-group">
+                                        <span className="settings-label-main">Typography & Spacing</span>
+                                        <div className="settings-card">
+                                            <div className="settings-row" style={{ gap: '16px', borderBottom: 'none', paddingBottom: '0' }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Font Family</span>
+                                                    <select value={typography.font} onChange={(e) => setTypography({ ...typography, font: e.target.value })} className="elite-select">
+                                                        <option value="Sans">Modern (Sans)</option>
+                                                        <option value="Serif">LaTeX (Standard)</option>
+                                                        <option value="Mono">Code (Mono)</option>
+                                                    </select>
+                                                </div>
+                                                <div style={{ flex: 1 }}>
+                                                    <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Line Spacing</span>
+                                                    <select value={spacing} onChange={(e) => setSpacing(e.target.value)} className="elite-select">
+                                                        <option value="Too narrow">Too narrow</option>
+                                                        <option value="narrow">Narrow</option>
+                                                        <option value="normal">Normal</option>
+                                                        <option value="wide">Wide</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div className="settings-row">
+                                                <div style={{ flex: 1 }}>
+                                                    <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Font Size (px)</span>
+                                                    <input
+                                                        type="number"
+                                                        value={typography.size}
+                                                        onChange={(e) => setTypography({ ...typography, size: e.target.value === '' ? '' : parseInt(e.target.value) })}
+                                                        onBlur={() => setTypography({ ...typography, size: typography.size || 13 })}
+                                                        className="elite-input"
+                                                        style={{ width: '50%' }}
+                                                    />
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="settings-row">
-                                        <div style={{ flex: 1 }}>
-                                            <span className="settings-row-title" style={{ display: 'block', marginBottom: '8px' }}>Font Size (px)</span>
-                                            <input
-                                                type="number"
-                                                value={typography.size}
-                                                onChange={(e) => setTypography({ ...typography, size: e.target.value === '' ? '' : parseInt(e.target.value) })}
-                                                onBlur={() => setTypography({ ...typography, size: typography.size || 13 })}
-                                                className="elite-input"
-                                                style={{ width: '50%' }}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
 
 
                                 </>
@@ -2797,14 +2797,14 @@ function App() {
                         </div>
                         <div className="custom-refine-body">
                             <label className="modal-label">Keyword</label>
-                            <input 
-                                type="text" 
-                                value={explanationModal.keyword} 
-                                disabled 
-                                className="elite-input" 
+                            <input
+                                type="text"
+                                value={explanationModal.keyword}
+                                disabled
+                                className="elite-input"
                                 style={{ marginBottom: '15px', background: 'var(--bg-sidebar)', opacity: 0.8 }}
                             />
-                            
+
                             <label className="modal-label">Detailed Explanation</label>
                             <textarea
                                 autoFocus
@@ -2814,7 +2814,7 @@ function App() {
                                 className="custom-refine-textarea"
                                 style={{ minHeight: '150px' }}
                             />
-                            
+
                             <div className="modal-btns" style={{ marginTop: '20px' }}>
                                 <button onClick={() => setExplanationModal({ isOpen: false, keyword: '', text: '' })}>Cancel</button>
                                 <button className="btn-primary" onClick={handleSaveExplanation}>
