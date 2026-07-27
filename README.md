@@ -13,7 +13,7 @@ A local-first desktop notebook built for AI-assisted studying. Write or paste pl
 
 **For Windows:**
 1. Click the **[Download for Windows (.exe)](https://github.com/ShahMdAbid/pnb-exe/releases/latest)** button above.
-2. Run the downloaded installer file (e.g., `Poring-Notebook-Setup-xxx.exe`).
+2. Run the downloaded installer file (`Poring-Notebook-Setup-1.3.2.exe`).
 
 **For Linux:**
 1. Click the **[Download for Linux (.AppImage)](https://github.com/ShahMdAbid/pnb-exe/releases/latest)** button above.
