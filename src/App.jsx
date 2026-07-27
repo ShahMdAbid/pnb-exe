@@ -15,6 +15,32 @@ import LivePreviewEditor from './components/LivePreviewEditor';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
+import mermaid from 'mermaid';
+mermaid.initialize({ startOnLoad: false, theme: 'default' });
+
+const MermaidChart = ({ code }) => {
+    const [svg, setSvg] = useState('');
+
+    useEffect(() => {
+        let isMounted = true;
+        const currentId = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
+        // Mermaid hates \r and might throw syntax errors
+        const sanitizedCode = typeof code === 'string' ? code.replace(/\r/g, '') : '';
+        
+        mermaid.render(currentId, sanitizedCode).then((result) => {
+            if (isMounted) setSvg(result.svg);
+        }).catch((e) => {
+            if (isMounted) setSvg(`<div style="color:red; border: 1px solid red; padding: 10px;">Mermaid Error: ${e.message}</div>`);
+            // Clean up the dangling error SVG that Mermaid appends to the body
+            const dangling = document.getElementById('d' + currentId);
+            if (dangling) dangling.remove();
+        });
+        return () => { isMounted = false; };
+    }, [code]);
+
+    return <div className="mermaid-wrapper" style={{ display: 'flex', justifyContent: 'center', margin: '20px 0' }} dangerouslySetInnerHTML={{ __html: svg }} />;
+};
+
 // Standard memoization ensures the editors don't re-render unless their props change.
 import { memo } from 'react';
 const MemoizedColorfulEditor = memo(ColorfulEditor);
@@ -304,6 +330,11 @@ const MarkdownComponents = {
     code({node, inline, className, children, ...props}) {
         const match = /language-(\w+)/.exec(className || '');
         const isDark = document.querySelector('.app-container')?.classList.contains('dark-theme') ?? true;
+        
+        if (!inline && match && match[1] === 'mermaid') {
+            return <MermaidChart code={String(children).replace(/\n$/, '')} />;
+        }
+        
         return !inline && match ? (
             <SyntaxHighlighter
                 {...props}
@@ -982,12 +1013,11 @@ function App() {
             return;
         }
         if (deleteConfirm.type === 'note') {
-            setNotes(notes.filter(n => n.id !== deleteConfirm.id));
-            if (activeNoteId === deleteConfirm.id) setActiveNoteId(ABOUT_NOTE.id);
+            setNotes(prev => prev.filter(n => n.id !== deleteConfirm.id));
+            setActiveNoteId(prev => (prev === deleteConfirm.id ? ABOUT_NOTE.id : prev));
         } else if (deleteConfirm.type === 'folder') {
-            setFolders(folders.filter(f => f.id !== deleteConfirm.id));
-            // Optionally orphan or delete notes in this folder
-            setNotes(notes.map(n => n.folderId === deleteConfirm.id ? { ...n, folderId: null } : n));
+            setFolders(prev => prev.filter(f => f.id !== deleteConfirm.id));
+            setNotes(prev => prev.map(n => n.folderId === deleteConfirm.id ? { ...n, folderId: null } : n));
         }
         setDeleteConfirm(null);
     };
@@ -1760,10 +1790,6 @@ function App() {
         // Restore Math and Code blocks
         placeholders.reverse().forEach(p => {
             let restoredText = p.text;
-            if (p.key.startsWith('@@BLOCK_MATH_')) {
-                const innerMath = p.text.replace(/^\$\$|\$\$$/g, '');
-                restoredText = `<span class="math-center-wrapper">$\\displaystyle ${innerMath}$</span>`;
-            }
             c = c.split(p.key + p.padding).join(restoredText);
         });
 

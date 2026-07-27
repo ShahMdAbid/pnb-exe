@@ -6,6 +6,8 @@ import { EditorView, Decoration, ViewPlugin, WidgetType } from '@codemirror/view
 import { RangeSetBuilder, StateField } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 import katex from 'katex';
+import mermaid from 'mermaid';
+mermaid.initialize({ startOnLoad: false, theme: 'default' });
 import { createRoot } from 'react-dom/client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -197,6 +199,43 @@ class MathWidget extends WidgetType {
             container.innerText = this.isBlock ? `$$${this.math}$$` : `$${this.math}$`;
             container.style.color = "red";
         }
+        return container;
+    }
+    destroy(dom) {
+        if (dom._observer) dom._observer.disconnect();
+    }
+}
+
+class MermaidWidget extends WidgetType {
+    constructor(code) {
+        super();
+        this.code = typeof code === 'string' ? code.replace(/\r/g, '') : '';
+        this.id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
+    }
+    eq(other) { return this.code === other.code; }
+    ignoreEvent() { return false; }
+    toDOM(view) {
+        const container = document.createElement("div");
+        container.className = "cm-mermaid-widget";
+        container.style.marginTop = "10px";
+        container.style.marginBottom = "10px";
+        container.style.display = "flex";
+        container.style.justifyContent = "center";
+        
+        if (view) {
+            const observer = new ResizeObserver(() => view.requestMeasure());
+            observer.observe(container);
+            container._observer = observer;
+        }
+
+        mermaid.render(this.id, this.code).then(({ svg }) => {
+            container.innerHTML = svg;
+        }).catch(e => {
+            container.innerHTML = `<div style="color:red; border: 1px solid red; padding: 10px;">Mermaid Error: ${e.message}</div>`;
+            const dangling = document.getElementById('d' + this.id);
+            if (dangling) dangling.remove();
+        });
+        
         return container;
     }
     destroy(dom) {
@@ -508,6 +547,23 @@ function buildBlockDecorations(state) {
                         from: start,
                         to: end,
                         deco: Decoration.replace({ widget: new MathWidget(match[1], true), block: true })
+                    });
+                }
+            }
+        }
+
+        const mermaidRegex = /```mermaid\n([\s\S]*?)```/g;
+        while ((match = mermaidRegex.exec(text)) !== null) {
+            const start = match.index;
+            const end = start + match[0].length;
+            if (!(selFrom <= end && selTo >= start)) {
+                const fromLine = state.doc.lineAt(start);
+                const toLine = state.doc.lineAt(end);
+                if (fromLine.number !== toLine.number) {
+                    decos.push({
+                        from: start,
+                        to: end,
+                        deco: Decoration.replace({ widget: new MermaidWidget(match[1]), block: true })
                     });
                 }
             }
