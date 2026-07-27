@@ -2,18 +2,28 @@
 
 A local-first desktop notebook built for AI-assisted studying. Write or paste plain Markdown, render equations with KaTeX, preview your document as you work, and export to PDF, .docx, or Google Docs with a click.
 
-[![Download Latest Release](https://img.shields.io/github/v/release/ShahMdAbid/pnb-exe?label=Download%20Poring%20Notebook%20(.exe)&style=for-the-badge&color=2563eb)](https://github.com/ShahMdAbid/pnb-exe/releases/latest)
+[![Download for Windows (.exe)](https://img.shields.io/github/v/release/ShahMdAbid/pnb-exe?label=Download%20Windows%20(.exe)&style=for-the-badge&color=2563eb)](https://github.com/ShahMdAbid/pnb-exe/releases/latest)
+[![Download for Linux (.AppImage)](https://img.shields.io/github/v/release/ShahMdAbid/pnb-exe?label=Download%20Linux%20(.AppImage)&style=for-the-badge&color=10b981)](https://github.com/ShahMdAbid/pnb-exe/releases/latest)
 
 ---
 
 ##  User Guide & Feature Walkthrough
 
 ### 1. Download & Installation
-1. Click the **[Download Poring Notebook (.exe)](https://github.com/ShahMdAbid/pnb-exe/releases/latest)** button above.
-2. Run the downloaded installer file (`Poring-Notebook-Setup-1.3.2.exe`).
-3. To export notes containing math equations properly into `.docx` or Google Docs format, you **must install Pandoc**.
+
+**For Windows:**
+1. Click the **[Download for Windows (.exe)](https://github.com/ShahMdAbid/pnb-exe/releases/latest)** button above.
+2. Run the downloaded installer file (e.g., `Poring-Notebook-Setup-xxx.exe`).
+
+**For Linux:**
+1. Click the **[Download for Linux (.AppImage)](https://github.com/ShahMdAbid/pnb-exe/releases/latest)** button above.
+2. You can download either the `.AppImage` (portable) or `.deb` (installer) file.
+3. For `.AppImage`, open terminal, grant execute permission (`chmod +x filename.AppImage`), and run it.
+
+**Dependencies (Both OS):**
+4. To export notes containing math equations properly into `.docx` or Google Docs format, you **must install Pandoc**.
   - Go to the [Pandoc Releases Page](https://github.com/jgm/pandoc/releases/latest).
-  - Download and install the **Windows Installer (`.msi`)** (e.g., `pandoc-3.x-windows-x86_64.msi`).
+  - Download and install the appropriate installer for your OS (`.msi` for Windows, `.deb` or `tar.gz` for Linux).
 4. Open **Poring Notebook** from your Desktop or Start Menu.
 5. Try exporting a note to `.docx`. If it exports successfully, you're all set! If it fails, open **Settings** (⚙️) ➔ **General** and paste your custom Pandoc path into the **Custom Pandoc Path** field
 
