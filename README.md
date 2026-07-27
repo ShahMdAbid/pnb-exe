@@ -18,7 +18,7 @@ A local-first desktop notebook built for AI-assisted studying. Write or paste pl
 1. Click the **[Download for Linux (.deb)](https://github.com/ShahMdAbid/pnb-exe/releases/latest/download/Poring-Notebook-Setup-1.3.2.deb)** button above.
 
 **Dependencies (Both OS):**
-4. To export notes containing math equations properly into `.docx` or Google Docs format, you **must install Pandoc**.
+To export notes containing math equations properly into `.docx` or Google Docs format, you **must install Pandoc**.
   - Go to the [Pandoc Releases Page](https://github.com/jgm/pandoc/releases/latest).
   - Download and install the appropriate installer for your OS (`.msi` for Windows, `.deb` or `tar.gz` for Linux).
 4. Open **Poring Notebook** from your Desktop or Start Menu.
@@ -99,7 +99,7 @@ Switch between four view modes using the top-right mode toggles:
 ### 8.  Automated Clipboard Listener
 When researching or batch-copying information from websites and documents:
 - Click the **Clipboard Icon** 📋 in the top toolbar to enable **Auto-Note (Clipboard Listener)**.
-- Every piece of text you copy to your clipboard will automatically be saved into a new timestamped note, saving you from tedious manual copy-pasting!
+- Every piece of text you copy to your clipboard will automatically be saved into your current note, saving you from tedious manual copy-pasting!
 
 
 ---
@@ -119,6 +119,6 @@ If you are using a laptop with a smaller screen and the toolbar or editor feels 
 - Press **`Ctrl` + `-`**  to **Zoom Out** (Make UI smaller).
 - Press **`Ctrl` + `0`** to **Reset** the zoom to default.
 
-- **`Ctrl` + `F` (or `Cmd` + `F`)**: selects the entire text block or paragraph where your cursor is currently positioned. This makes it easy to grab or replace specific chunks of text without manually dragging your mouse.
+- **`Ctrl` + `F`**: selects the entire text block or paragraph where your cursor is currently positioned. This makes it easy to grab or replace specific chunks of text without manually dragging your mouse.
 
 
