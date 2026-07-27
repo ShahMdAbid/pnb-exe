@@ -1,6 +1,6 @@
 # Poring Notebook
 
-A local-first desktop notebook built for AI-assisted studying. Write or Paste plain Markdown, render equations by KaTex , preview your document as you work, and export to PDF, .docx, or Google Docs with a click. 
+A local-first desktop notebook built for AI-assisted studying. Write or paste plain Markdown, render equations with KaTeX, preview your document as you work, and export to PDF, .docx, or Google Docs with a click.
 
 [![Download Latest Release](https://img.shields.io/github/v/release/ShahMdAbid/pnb-exe?label=Download%20Poring%20Notebook%20(.exe)&style=for-the-badge&color=2563eb)](https://github.com/ShahMdAbid/pnb-exe/releases/latest)
 
