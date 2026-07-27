@@ -1,7 +1,7 @@
 {
     "name": "poring-notebook",
     "private": true,
-    "version": "1.3.2",
+    "version": "1.3.3",
     "type": "module",
     "main": "electron.cjs",
     "scripts": {
@@ -77,6 +77,13 @@
         ],
         "win": {
             "target": "nsis"
+        },
+        "linux": {
+            "target": [
+                "AppImage",
+                "deb"
+            ],
+            "category": "Office"
         }
     }
 }
