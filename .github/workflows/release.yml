@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Code
@@ -27,6 +29,7 @@ jobs:
         run: npm run electron:build
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Needed for electron-builder publish
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Artifacts (Optional)
         uses: actions/upload-artifact@v4
