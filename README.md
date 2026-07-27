@@ -2,8 +2,8 @@
 
 A local-first desktop notebook built for AI-assisted studying. Write or paste plain Markdown, render equations with KaTeX, preview your document as you work, and export to PDF, .docx, or Google Docs with a click.
 
-[![Download for Windows (.exe)](https://img.shields.io/github/v/release/ShahMdAbid/pnb-exe?label=Download%20Windows%20(.exe)&style=for-the-badge&color=2563eb)](https://github.com/ShahMdAbid/pnb-exe/releases/latest)
-[![Download for Linux (.AppImage)](https://img.shields.io/github/v/release/ShahMdAbid/pnb-exe?label=Download%20Linux%20(.AppImage)&style=for-the-badge&color=10b981)](https://github.com/ShahMdAbid/pnb-exe/releases/latest)
+[![Download for Windows (.exe)](https://img.shields.io/github/v/release/ShahMdAbid/pnb-exe?label=Download%20Windows%20(.exe)&style=for-the-badge&color=2563eb)](https://github.com/ShahMdAbid/pnb-exe/releases/latest/download/Poring-Notebook-Setup-1.3.2.exe)
+[![Download for Linux (.deb)](https://img.shields.io/github/v/release/ShahMdAbid/pnb-exe?label=Download%20Linux%20(.deb)&style=for-the-badge&color=10b981)](https://github.com/ShahMdAbid/pnb-exe/releases/latest/download/Poring-Notebook-Setup-1.3.2.deb)
 
 ---
 
@@ -12,13 +12,10 @@ A local-first desktop notebook built for AI-assisted studying. Write or paste pl
 ### 1. Download & Installation
 
 **For Windows:**
-1. Click the **[Download for Windows (.exe)](https://github.com/ShahMdAbid/pnb-exe/releases/latest)** button above.
-2. Run the downloaded installer file (`Poring-Notebook-Setup-1.3.2.exe`).
+1. Click the **[Download for Windows (.exe)](https://github.com/ShahMdAbid/pnb-exe/releases/latest/download/Poring-Notebook-Setup-1.3.2.exe)** button above.
 
 **For Linux:**
-1. Click the **[Download for Linux (.AppImage)](https://github.com/ShahMdAbid/pnb-exe/releases/latest)** button above.
-2. You can download either the `.AppImage` (portable) or `.deb` (installer) file.
-3. For `.AppImage`, open terminal, grant execute permission (`chmod +x filename.AppImage`), and run it.
+1. Click the **[Download for Linux (.deb)](https://github.com/ShahMdAbid/pnb-exe/releases/latest/download/Poring-Notebook-Setup-1.3.2.deb)** button above.
 
 **Dependencies (Both OS):**
 4. To export notes containing math equations properly into `.docx` or Google Docs format, you **must install Pandoc**.
