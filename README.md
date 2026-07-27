@@ -1,25 +1,8 @@
+# Poring Notebook
 
-You ask an AI a question. It gives a great explanation.
-
-Now where do you keep it?
-
-Google Docs? Equations break.\
-Overleaf? Great for papers, but overkill with steeper learning curve.\
-Obsidian? Excellent knowledge management, but not focused on document export.
-
-Try poring notebook today: \
-A local-first desktop notebook built for AI-assisted studying. Write or Paste plain Markdown, render equations by KaTex instantly, preview your document as you work, and export to PDF, .docx, or Google Docs with a click. 
+A local-first desktop notebook built for AI-assisted studying. Write or Paste plain Markdown, render equations by KaTex , preview your document as you work, and export to PDF, .docx, or Google Docs with a click. 
 
 [![Download Latest Release](https://img.shields.io/github/v/release/ShahMdAbid/pnb-exe?label=Download%20Poring%20Notebook%20(.exe)&style=for-the-badge&color=2563eb)](https://github.com/ShahMdAbid/pnb-exe/releases/latest)
-
----
-
-
-###  In-App AI Features are Deprecated
-In-app AI API setups often create friction for new users and clutter the interface.So built-in AI tools are deprecated to keep Poring Notebook **minimal, focused** on writing and reading.
-
-> **💡 You can still use AI seamlessly!**  
-> Because Poring Notebook saves all your notes as standard `.md` files in your native local OS workspace, you can open your workspace folder in **Antigravity, Codex or Claude code**. Any changes made by external AI tools will update **live in real time** inside Poring Notebook!
 
 ---
 
@@ -27,20 +10,26 @@ In-app AI API setups often create friction for new users and clutter the interfa
 
 ### 1. Download & Installation
 1. Click the **[Download Poring Notebook (.exe)](https://github.com/ShahMdAbid/pnb-exe/releases/latest)** button above.
-2. Run the downloaded installer file (`Poring-Notebook-Setup-1.3.1.exe`).
+2. Run the downloaded installer file (`Poring-Notebook-Setup-1.3.2.exe`).
 3. To export notes containing math equations properly into `.docx` or Google Docs format, you **must install Pandoc**.
   - Go to the [Pandoc Releases Page](https://github.com/jgm/pandoc/releases/latest).
   - Download and install the **Windows Installer (`.msi`)** (e.g., `pandoc-3.x-windows-x86_64.msi`).
 4. Open **Poring Notebook** from your Desktop or Start Menu.
-5. Try exporting a note to `.docx`. If it exports successfully, you're all set! If it fails, open **Settings** (⚙️) ➔ **General** and paste your custom Pandoc path into the **Custom Pandoc Path** field.
+5. Try exporting a note to `.docx`. If it exports successfully, you're all set! If it fails, open **Settings** (⚙️) ➔ **General** and paste your custom Pandoc path into the **Custom Pandoc Path** field
 
-> **💡 Note on Updates:** You only need to download the installer once! Whenever a new version is available, just click "check Update" buttton.
----
+
+<p align="center">
+  <img src="src/assets/image.png" width="100%" />
+  <img src="src/assets/image1.png" width="60%" />
+</p>
+
 
 ### 2. Workspace Setup (Optional)
 By default, Poring Notebook creates a local notes directory. 
 - Click the **Gear Icon** ⚙️ (upper right) to open **Preferences**.
 - Change your **Workspace Folder** to any custom directory on your hard drive. All your `.md` files and images will be stored locally .
+
+> **💡 Note on Updates:** You only need to download the installer once! Whenever a new version is available, just click "Check Update" button in Settings.
 
 ---
 
@@ -55,13 +44,14 @@ By default, Poring Notebook creates a local notes directory.
 - **Manual Writing**: Write your notes using standard Markdown and KaTeX math syntax:
   - Inline Math: `$E = mc^2$`
   - Block Math: `$$ \int_{a}^{b} f(x) \, dx = F(b) - F(a) $$`
-  - **Mermaid Diagrams**: Create flowcharts and diagrams using Mermaid syntax blocks:
-    ```markdown
-    ```mermaid
-    graph TD;
-        A-->B;
-    ```
-    ```
+  - **Mermaid Diagrams**: Create flowcharts and diagrams using Mermaid syntax blocks. 
+
+**In-App AI Features are Deprecated**
+   In-app AI API setups often create friction for new users and clutter the interface. So built-in AI tools are removed to keep Poring Notebook **minimal, focused**.
+
+> 💡 You can still use AI seamlessly!  
+> Because Poring Notebook saves all your notes as standard `.md` files in your native local OS workspace, you can open your workspace folder in **Antigravity, Codex or Claude code**. Any changes made by external AI tools will update **live in real time** inside Poring Notebook! 
+
 - **External AI Workflow**:
   1. Click on the note title button in the top toolbar and select **Copy Path**.
   2. Open the file path in **Antigravity** or your preferred IDE/AI assistant.
@@ -117,12 +107,12 @@ Click the **`Export`** dropdown menu in the top-right toolbar:
 
 ---
 
-### 11. ⌨️ Useful Keyboard Shortcuts
+### 10. Keyboard Shortcuts
 If you are using a laptop with a smaller screen and the toolbar or editor feels cramped, you can easily adjust the UI scale:
-- Press **`Ctrl` + `+`** (or `Cmd` + `+`) to **Zoom In** (Make UI larger).
-- Press **`Ctrl` + `-`** (or `Cmd` + `-`) to **Zoom Out** (Make UI smaller).
-- Press **`Ctrl` + `0`** (or `Cmd` + `0`) to **Reset** the zoom to default.
+- Press **`Ctrl` + `+`**  to **Zoom In** (Make UI larger).
+- Press **`Ctrl` + `-`**  to **Zoom Out** (Make UI smaller).
+- Press **`Ctrl` + `0`** to **Reset** the zoom to default.
 
-- **`Ctrl` + `F` (or `Cmd` + `F`)**: selects the entire text block or paragraph where your cursor is currently positioned. This makes it incredibly easy to grab or replace specific chunks of text without manually dragging your mouse.
+- **`Ctrl` + `F` (or `Cmd` + `F`)**: selects the entire text block or paragraph where your cursor is currently positioned. This makes it easy to grab or replace specific chunks of text without manually dragging your mouse.
 
 
