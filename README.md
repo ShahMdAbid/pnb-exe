@@ -20,7 +20,6 @@ A local-first desktop notebook built for AI-assisted studying. Write or Paste pl
 
 <p align="center">
   <img src="src/assets/image.png" width="100%" />
-  <img src="src/assets/image1.png" width="60%" />
 </p>
 
 
